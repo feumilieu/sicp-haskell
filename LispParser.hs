@@ -19,6 +19,7 @@ module LispParser
 
 import Data.Char ( isSpace, digitToInt )
 import Control.Applicative hiding ( (<|>), many )
+import Control.Monad (void)
 
 import Text.Parsec
 
@@ -54,11 +55,11 @@ instance Read Value where
 -------------------------------------------------------------------------------
 
 whitespace, lineComment, nestedComment, space :: Stream s m Char => ParsecT s u m ()
-whitespace        = satisfy isSpace >> return ()
-lineComment       = char ';' >> manyTill anyToken ((oneOf "\n\t" >> return ()) <|> eof ) >> return ()
+whitespace        = void $ satisfy isSpace
+lineComment       = char ';' >> (void $ manyTill anyToken $ void (oneOf "\n\t") <|> eof)
 nestedComment     = try (string "#|") >> inNestedComment
   where
-    inNestedComment   = (try (string "|#") >> return ())
+    inNestedComment   = (void $ try $ string "|#")
       <|> (nestedComment >> inNestedComment)
       <|> (skipMany1 (noneOf "#|") >> inNestedComment)
       <|> (oneOf "#|" >> inNestedComment)
@@ -72,16 +73,16 @@ idInitialChars    = "!$%&*/:<=>?^_~"
 idSubsequentChars = "+-.@"
 
 lispAtom :: Stream s m Char => ParsecT s u m Value
-lispAtom          = Atom <$> (lexeme $ (:) <$> initial <*> many subsequent)
+lispAtom          = Atom <$> lexeme ((:) <$> initial <*> many subsequent)
   where
     initial           = letter <|> oneOf idInitialChars
     subsequent        = initial <|> digit <|> oneOf idSubsequentChars
 
 lispBool :: Stream s m Char => ParsecT s u m Value
-lispBool          = Bool <$> (lexeme $ (char '#' >> ((char 't' >> return True) <|> (char 'f' >> return False))))
+lispBool          = Bool <$> lexeme (char '#' >> ((char 't' >> return True) <|> (char 'f' >> return False)))
 
 lispInteger :: Stream s m Char => ParsecT s u m Value
-lispInteger       = Integer <$> (lexeme $ int)
+lispInteger       = Integer <$> lexeme int
   where
     makeInt           = foldl (\x y -> x * 10 + y) 0
     sign              = (char '-' >> return negate)
@@ -91,7 +92,7 @@ lispInteger       = Integer <$> (lexeme $ int)
     nat               = makeInt <$> many1 (fromIntegral . digitToInt <$> digit)
 
 lispString :: Stream s m Char => ParsecT s u m Value
-lispString        = String <$> (lexeme $ between (char '\"') (char '\"') stringInternal)
+lispString        = String <$> lexeme (between (char '\"') (char '\"') stringInternal)
   where
     stringEscapes     = char '\"'
       <|> char '\\'
@@ -100,15 +101,15 @@ lispString        = String <$> (lexeme $ between (char '\"') (char '\"') stringI
       <|> '\t' <$ char 't'
       <|> '\n' <$ char 'n'
       <|> '\r' <$ char 'r'
-    stringInternal    = many $ (noneOf "\\\"") <|> (char '\\' >> stringEscapes)
+    stringInternal    = many $ noneOf "\\\"" <|> (char '\\' >> stringEscapes)
 
 lispPair :: Stream s m Char => ParsecT s u m Value
-lispPair          = (lexeme $ char '(') >> inlispPairL
+lispPair          = lexeme (char '(') >> inlispPairL
   where
-    inlispPairR l     = ((lexeme $ char ')') >> (return $ Pair l Nil))
-      <|> ((lexeme $ char '.') >> (Pair l <$> lispExpr) <* (lexeme $ char ')'))
+    inlispPairR l     = (lexeme (char ')') >> return (Pair l Nil))
+      <|> (lexeme (char '.') >> (Pair l <$> lispExpr) <* lexeme (char ')'))
       <|> (Pair l <$> (lispExpr >>= inlispPairR) )
-    inlispPairL       = (lexeme $ char ')' >> return Nil)
+    inlispPairL       = lexeme (char ')' >> return Nil)
       <|> (lispExpr >>= inlispPairR)
 
 lispExpr :: Stream s m Char => ParsecT s u m Value
@@ -149,7 +150,7 @@ instance Arbitrary Value where
       genChar = elements $ ['a'..'z'] ++ ['A'..'Z']
       genInitChar = frequency [(5, genChar), (1, elements idInitialChars)]
       genSubsequentChar = frequency [(5, genChar), (1, elements idInitialChars), (1, elements idSubsequentChars)]
-      genAtom = Atom <$> ((:) <$> genInitChar <*> (listOf genSubsequentChar))
+      genAtom = Atom <$> ((:) <$> genInitChar <*> listOf genSubsequentChar)
 
       genBool = Bool <$> arbitrary
 

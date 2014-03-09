@@ -34,13 +34,12 @@ import LispParser hiding (tests)
 import qualified Data.Text.IO as T
 import Text.Parsec.Text ()
 
--- TODO: try to untangle pipes monad and db monad (will it work?  is it worth trying?)
 -- TODO: profiling
 -- TODO: lint
 
 -- TODO: combine two levels of errors (IOError and ParseError) into one in dbParseFile
 -- TODO: introduce function [Value] -> DB, remove parser functions
--- TODO: make evaluate more generic .. -> m () ? .. -> Producer Value ?
+-- TODO: make `evaluate` more generic.  How?
 
 -------------------------------------------------------------------------------
 -- Datatypes
@@ -75,36 +74,36 @@ instantiate e frame = copy e
 -------------------------------------------------------------------------------
 
 qeval :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-qeval ((Atom "and") `Pair` q)
+qeval (Atom "and" `Pair` q)
   | isJust plq = conjoin $ fromJust plq
   where plq = properList q
-qeval ((Atom "or") `Pair` q)
+qeval (Atom "or" `Pair` q)
   | isJust plq = disjoin $ fromJust plq
   where plq = properList q
-qeval ((Atom "not") `Pair` (q `Pair` Nil)) = negateQuery q
-qeval ((Atom "lisp-value")  `Pair` _) = undefined
-qeval ((Atom "always-true") `Pair` _) = id
+qeval (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery q
+qeval (Atom "lisp-value"  `Pair` _) = undefined
+qeval (Atom "always-true" `Pair` _) = id
 qeval q = simpleQuery q
 
 properList :: Value -> Maybe [Value]
-properList (x `Pair` xs) = (x:) <$> (properList xs)
+properList (x `Pair` xs) = (x:) <$> properList xs
 properList Nil = Just []
 properList _ = Nothing
 
 evaluate :: DB -> Value -> Value -> (Value -> IO ()) -> IO ()
-evaluate db q o f = runDBMonad db $ runEffect $ (qeval q $ yield Map.empty) >-> (P.map $ instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
+evaluate db q o f = runDBMonad db $ runEffect $ qeval q (yield Map.empty) >-> P.map (instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
 
 simpleQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-simpleQuery q s = mapFlattenInterleave (\f -> findAssertions q f >> applyRules q f) s
+simpleQuery q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules q f)
 
 conjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-conjoin = foldr (\a b -> b . (qeval a)) id
+conjoin = foldr (\a b -> b . qeval a) id
 
 disjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
 disjoin = foldr (\a b s -> interleave (qeval a s) (b s)) (const emptyStream)
 
 negateQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-negateQuery q s = mapFlattenInterleave tryQ s
+negateQuery q = mapFlattenInterleave tryQ
   where
     tryQ f = do
       b <- lift $ P.null $ qeval q $ yield f
@@ -174,10 +173,10 @@ dependsOn :: Value -> String -> Frame -> Bool
 dependsOn e var frame = treeWalk e
   where
     treeWalk ee = case ee of
-        (Atom ('?':een)) -> if een == var then True else
-          case Map.lookup een frame of
+        (Atom ('?':een)) -> (een == var) ||
+          (case Map.lookup een frame of
             Just eenv -> treeWalk eenv
-            Nothing -> False
+            Nothing -> False)
         _ -> case ee of
           (Pair l r) -> treeWalk l || treeWalk r
           _ -> False
@@ -205,8 +204,8 @@ class Indexable a where
   index :: a -> Maybe String
 
 instance Indexable Value where
-  index ((Atom ('?':_)) `Pair` _) = Nothing
-  index ((Atom x) `Pair` _) = Just x
+  index (Atom ('?':_) `Pair` _) = Nothing
+  index (Atom x `Pair` _) = Just x
   index _ = Nothing
 
 -- instance Indexable Rule where -- TODO?: TypeSynonymInstances, FlexibleInstances
@@ -223,8 +222,8 @@ storeInIndex a db =
 
 addAssertionOrRule :: Value -> DB -> DB
 addAssertionOrRule x = case x of
-  ((Atom "rule") `Pair` (conclusion `Pair` (body `Pair` Nil))) -> addRule (conclusion, body)
-  ((Atom "rule") `Pair` (conclusion `Pair` Nil)) -> addRule (conclusion, ((Atom "always-true") `Pair` Nil))
+  (Atom "rule" `Pair` (conclusion `Pair` (body `Pair` Nil))) -> addRule (conclusion, body)
+  (Atom "rule" `Pair` (conclusion `Pair` Nil)) -> addRule (conclusion, Atom "always-true" `Pair` Nil)
   a -> addAssertion a
   where
     addAssertion a db = db {
@@ -244,8 +243,8 @@ dbParseFile fname = runP dbParser () fname `liftM` T.readFile fname
 
 fetch :: Indexable a => (DB -> [a]) -> (DB -> MapStrict.Map String [a]) -> Value -> Producer a DBMonad ()
 fetch sf sif p = case index p of
-  Nothing -> (liftM sf $ lift ask) >>= each
-  Just i -> (liftM sif $ lift ask) >>= (maybe emptyStream each . MapStrict.lookup i)
+  Nothing -> liftM sf (lift ask) >>= each
+  Just i -> liftM sif (lift ask) >>= (maybe emptyStream each . MapStrict.lookup i)
 
 fetchAssertions :: Value -> Producer Value DBMonad ()
 fetchAssertions = fetch assertions assertionsIndexed
@@ -299,12 +298,12 @@ tests db = TestList
   , testEqualProducer "mapFlatteinInterleave" [1,1,2,1,3,2,1,3,2,4,2,3,3,4,4,5,5,6] $
       mapFlattenInterleave fn (each [3, 4, 5, 6])
   , testEqualProducer "append" [3,4,5,6,10,11,12] $
-      (each [3 :: Int, 4, 5, 6]) >> (each [10, 11, 12])
+      each [3 :: Int, 4, 5, 6] >> each [10, 11, 12]
 
 -- database
 
-  , test $ (runDBMonad db $ P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 45
-  , test $ (runDBMonad db $ P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 12
+  , test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 45
+  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 12
 
 -- assertions
 
@@ -395,8 +394,8 @@ tests db = TestList
       assertEqual "caseR15" (parseMultiSet "2 3")
 
   , test $ assertEqual "properList1" (properList Nil) (Just [])
-  , test $ assertEqual "properList2" (properList ((Atom "x") `Pair` Nil)) (Just [(Atom "x")])
-  , test $ assertEqual "properList3" (properList ((Atom "x") `Pair` (Atom "b"))) Nothing
+  , test $ assertEqual "properList2" (properList (Atom "x" `Pair` Nil)) (Just [Atom "x"])
+  , test $ assertEqual "properList3" (properList (Atom "x" `Pair` Atom "b")) Nothing
 
 -- lisp-value
 {-
@@ -428,7 +427,7 @@ tests db = TestList
     testEqualProducer s expected actual = test $ P.toListM actual >>= assertEqual s expected
 
     toMultiSet :: (Ord a, Monad m) => Producer a m () -> m (MultiSet a)
-    toMultiSet p = P.fold (flip MultiSet.insert) MultiSet.empty id p
+    toMultiSet = P.fold (flip MultiSet.insert) MultiSet.empty id
 
     runQuery :: String -> String -> IO (MultiSet Value)
     runQuery o q = (MultiSet.map $ instantiate $ read o) `liftM` (runDBMonad db $ toMultiSet $ qeval (read q) $ yield Map.empty)
@@ -500,7 +499,7 @@ main = do
 
       putStrLn "----------------------------------------"
 
-    Left e -> putStrLn $ show e
+    Left e -> print e
 
 -}
 

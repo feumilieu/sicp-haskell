@@ -14,8 +14,8 @@ main = do
 
     edb <- DB.dbParseFile "data.txt"
     case edb of
-        Right db -> void $ runTestTT $ TestList [ LispParser.tests, (DB.tests db) ]
-        Left e -> putStrLn $ show e
+        Right db -> void $ runTestTT $ TestList [ LispParser.tests, DB.tests db ]
+        Left e -> print e
     quickCheck LispParser.propValue
 
 

@@ -46,7 +46,7 @@ main = do
             case dbpe of
                 Right dbp -> case dbp of
                     Right db -> repl db
-                    Left pe -> putStrLn $ show pe
+                    Left pe -> print pe
                 Left e -> printIOError e
         _ -> putStrLn "specify filename for the database in command line"
     where
