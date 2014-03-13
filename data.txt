@@ -160,3 +160,33 @@
     (or (начальник ?staff-person ?boss)
         (and (подчиняется1 ?middle-manager ?boss)
             (начальник ?staff-person ?middle-manager))))
+
+; ------------------------------------
+; simple (reverses only first arg)
+
+(reverse1 () ())
+(rule (reverse1 (?x . ?xs) ?r)
+    (and
+        (reverse1 ?xs ?xsr)
+        (append-to-form ?xsr (?x) ?r) ))
+
+; -------------------------------------------
+;
+
+(rule (reverse ?a ?b)
+    (reverse-x ?a () ?b ()) )
+(rule (reverse-x (?x . ?xs) ?xt (?y . ?ys) ?yt)
+    (reverse-x ?xs (?x . ?xt) ?ys (?y . ?yt)) )
+(rule (reverse-x ?x ?xr ?xr ?x))
+(rule (reverse-x ?x (?c . ?xr) ?xr (?c . ?x)))
+
+; ------------------------------------------------------
+; misc
+
+(zip () () ())
+(rule (zip (?a . ?as) (?b . ?bs) ((?a . ?b) . ?abs))
+    (zip ?as ?bs ?abs))
+
+(rule (last (?x . ()) () ?x))
+(rule (last (?x . ?xs) (?x . ?xm) ?xr)
+    (last ?xs ?xm ?xr))

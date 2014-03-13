@@ -330,8 +330,8 @@ tests db = TestList
 
 -- database
 
-  , test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 45
-  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 14
+  , test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 47
+  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 22
 
 -- assertions
 
@@ -429,6 +429,23 @@ tests db = TestList
       assertEqual "caseR16" (parseMultiSet "(Уорбак Оливер)")
   , test $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
       assertEqual "caseR17" (parseMultiSet "(Уорбак Оливер)")
+
+  , test $ runQuery "?x" "(reverse () ?x)" >>=
+      assertEqual "reverse1" (parseMultiSet "()")
+  , test $ runQuery "?x" "(reverse ?x ())" >>=
+      assertEqual "reverse2" (parseMultiSet "()")
+  , test $ runQuery "?x" "(reverse (a) ?x)" >>=
+      assertEqual "reverse3" (parseMultiSet "(a)")
+  , test $ runQuery "?x" "(reverse ?x (a))" >>=
+      assertEqual "reverse4" (parseMultiSet "(a)")
+  , test $ runQuery "?x" "(reverse (a b c d) ?x)" >>=
+      assertEqual "reverse5" (parseMultiSet "(d c b a)")
+  , test $ runQuery "?x" "(reverse ?x (a b c d))" >>=
+      assertEqual "reverse6" (parseMultiSet "(d c b a)")
+  , test $ runQuery "?x" "(reverse (a b c d e) ?x)" >>=
+      assertEqual "reverse7" (parseMultiSet "(e d c b a)")
+  , test $ runQuery "?x" "(reverse ?x (a b c d e))" >>=
+      assertEqual "reverse8" (parseMultiSet "(e d c b a)")
 
 -- lisp-value
 {-
