@@ -12,9 +12,10 @@ module DB
   ) where
 
 import Data.Maybe
+import Data.List
 import Control.Applicative hiding (many)
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.State as S
 import Control.Monad.Reader
 
 import Pipes
@@ -27,6 +28,9 @@ import qualified Data.MultiSet as MultiSet
 
 import qualified Data.Map.Lazy as Map
 import qualified Data.Map.Strict as MapStrict
+
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Test.HUnit
 
@@ -73,17 +77,36 @@ instantiate e frame = copy e
 -- 4.4.4.2 Вычислитель
 -------------------------------------------------------------------------------
 
-qeval :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-qeval (Atom "and" `Pair` q)
-  | isJust plq = conjoin $ fromJust plq
+fixValue' :: Value -> S.State [String] Value
+fixValue' (Atom ('?':n)) = Atom <$> fixName n
+  where
+    fixName :: String -> S.State [String] (String)
+    fixName name = do
+      names <- get
+      case elemIndex name names of
+        Nothing -> do
+          put $ name : names
+          return $ show $ length names
+        Just i -> return $ show i
+fixValue' (a `Pair` b) = Pair <$> fixValue' a <*> fixValue' b
+fixValue' x = return x
+
+fixValue :: Value -> Frame -> Value
+fixValue v f = evalState (fixValue' $ instantiate v f) []
+
+-------------------------------------------------------------------------------
+
+qeval :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+qeval z (Atom "and" `Pair` q)
+  | isJust plq = conjoin z $ fromJust plq
   where plq = properList q
-qeval (Atom "or" `Pair` q)
-  | isJust plq = disjoin $ fromJust plq
+qeval z (Atom "or" `Pair` q)
+  | isJust plq = disjoin z $ fromJust plq
   where plq = properList q
-qeval (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery q
-qeval (Atom "lisp-value"  `Pair` _) = undefined
-qeval (Atom "always-true" `Pair` _) = id
-qeval q = simpleQuery q
+qeval z (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery z q
+qeval _ (Atom "lisp-value"  `Pair` _) = undefined
+qeval _ (Atom "always-true" `Pair` _) = id
+qeval z q = simpleQuery z q
 
 properList :: Value -> Maybe [Value]
 properList (x `Pair` xs) = (x:) <$> properList xs
@@ -91,22 +114,22 @@ properList Nil = Just []
 properList _ = Nothing
 
 evaluate :: DB -> Value -> Value -> (Value -> IO ()) -> IO ()
-evaluate db q o f = runDBMonad db $ runEffect $ qeval q (yield Map.empty) >-> P.map (instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
+evaluate db q o f = runDBMonad db $ runEffect $ qeval Set.empty q (yield Map.empty) >-> P.map (instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
 
-simpleQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-simpleQuery q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules q f)
+simpleQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+simpleQuery z q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules z q f)
 
-conjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-conjoin = foldr (\a b -> b . qeval a) id
+conjoin :: Set Value -> [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+conjoin z = foldr (\a b -> b . qeval z a) id
 
-disjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-disjoin = foldr (\a b s -> interleave (qeval a s) (b s)) (const emptyStream)
+disjoin :: Set Value -> [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+disjoin z = foldr (\a b s -> interleave (qeval z a s) (b s)) (const emptyStream)
 
-negateQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-negateQuery q = mapFlattenInterleave tryQ
+negateQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+negateQuery z q = mapFlattenInterleave tryQ
   where
     tryQ f = do
-      b <- lift $ P.null $ qeval q $ yield f
+      b <- lift $ P.null $ qeval z q $ yield f
       if b then yield f else emptyStream
 
 -------------------------------------------------------------------------------
@@ -132,14 +155,19 @@ patternMatch p d f = if p == d then Just f else Nothing
 -- 4.4.4.4 Правила и унификация
 -------------------------------------------------------------------------------
 
-applyRules :: Value -> Frame -> Producer Frame DBMonad ()
-applyRules p f = mapFlattenInterleave (applyARule p f) (fetchRules p)
+applyRules :: Set Value -> Value -> Frame -> Producer Frame DBMonad ()
+applyRules z p f = mapFlattenInterleave (applyARule z p f) (fetchRules p)
 
-applyARule :: Value -> Frame -> Rule -> Producer Frame DBMonad ()
-applyARule p f (c, b) = do
+applyARule :: Set Value -> Value -> Frame -> Rule -> Producer Frame DBMonad ()
+applyARule z p f (c, b) = do
   serial <- lift tick
-  case unifyMatch p (renameVariables c serial) f of
-    Just x -> qeval (renameVariables b serial) $ yield x
+  let cRenamed = renameVariables c serial
+  case unifyMatch p cRenamed f of
+    Just ff -> do
+      let xn = fixValue cRenamed ff
+      if Set.member xn z
+        then emptyStream
+        else qeval (Set.insert xn z) (renameVariables b serial) $ yield ff
     Nothing -> emptyStream
 
 renameVariables :: Value -> Int -> Value
@@ -303,7 +331,7 @@ tests db = TestList
 -- database
 
   , test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 45
-  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 12
+  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 14
 
 -- assertions
 
@@ -397,6 +425,11 @@ tests db = TestList
   , test $ assertEqual "properList2" (properList (Atom "x" `Pair` Nil)) (Just [Atom "x"])
   , test $ assertEqual "properList3" (properList (Atom "x" `Pair` Atom "b")) Nothing
 
+  , test $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
+      assertEqual "caseR10" (parseMultiSet "(Уорбак Оливер)")
+  , test $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
+      assertEqual "caseR10" (parseMultiSet "(Уорбак Оливер)")
+
 -- lisp-value
 {-
   , test $ runQuery "(?name ?y ?x)"
@@ -430,7 +463,7 @@ tests db = TestList
     toMultiSet = P.fold (flip MultiSet.insert) MultiSet.empty id
 
     runQuery :: String -> String -> IO (MultiSet Value)
-    runQuery o q = (MultiSet.map $ instantiate $ read o) `liftM` (runDBMonad db $ toMultiSet $ qeval (read q) $ yield Map.empty)
+    runQuery o q = (MultiSet.map $ instantiate $ read o) `liftM` (runDBMonad db $ toMultiSet $ qeval Set.empty (read q) $ yield Map.empty)
 
     parseMultiSet :: String -> MultiSet Value
     parseMultiSet s = case parse (LispParser.space >> many lispExpr <* eof) "" s of

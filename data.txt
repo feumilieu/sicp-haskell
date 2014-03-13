@@ -151,3 +151,12 @@
             (= ?a (?z . ?y))
             (last-pair ?y ?b)) ))
 
+(rule (подчиняется ?staff-person ?boss)
+    (or (начальник ?staff-person ?boss)
+        (and (начальник ?staff-person ?middle-manager)
+            (подчиняется ?middle-manager ?boss))))
+
+(rule (подчиняется1 ?staff-person ?boss)
+    (or (начальник ?staff-person ?boss)
+        (and (подчиняется1 ?middle-manager ?boss)
+            (начальник ?staff-person ?middle-manager))))
