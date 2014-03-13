@@ -426,9 +426,9 @@ tests db = TestList
   , test $ assertEqual "properList3" (properList (Atom "x" `Pair` Atom "b")) Nothing
 
   , test $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
-      assertEqual "caseR10" (parseMultiSet "(Уорбак Оливер)")
+      assertEqual "caseR16" (parseMultiSet "(Уорбак Оливер)")
   , test $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
-      assertEqual "caseR10" (parseMultiSet "(Уорбак Оливер)")
+      assertEqual "caseR17" (parseMultiSet "(Уорбак Оливер)")
 
 -- lisp-value
 {-
