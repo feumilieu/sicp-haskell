@@ -42,7 +42,6 @@ import Text.Parsec.Text ()
 -- TODO: lint
 
 -- TODO: rewrite signatures: Producer -> Producer to Pipe
--- TODO: fix textcases -- give them names
 -- TODO: combine two levels of errors (IOError and ParseError) into one in dbParseFile
 -- TODO: introduce function [Value] -> DB, remove parser functions
 -- TODO: make `evaluate` more generic.  How?
@@ -328,27 +327,27 @@ tests db = TestList
 
 -- database
 
-  , test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "fetchAssertions" 47
-  , test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "fetchRules" 22
+  , "fetchAssertions" ~: test $ runDBMonad db (P.length $ fetchAssertions Nil) >>= assertEqual "" 47
+  , "fetchRules"      ~: test $ runDBMonad db (P.length $ fetchRules Nil)      >>= assertEqual "" 22
 
 -- assertions
 
-  , test $ runQuery "?x" "(начальник ?x (Битобор Бен))" >>=
+  , "case 1" ~: test $ runQuery "?x" "(начальник ?x (Битобор Бен))" >>=
       assertEqual "case1" (parseMultiSet "(Хакер Лиза П)  (Фект Пабло Э) (Поправич Дайко)")
 
-  , test $ runQuery "?x" "(должность ?x (бухгалтерия . ?y))" >>=
+  , "case 2" ~: test $ runQuery "?x" "(должность ?x (бухгалтерия . ?y))" >>=
       assertEqual "case2" (parseMultiSet "(Крэтчит Роберт) (Скрудж Эбин)")
 
-  , test $ runQuery "?x" "(адрес ?x (Сламервилл . ?y))" >>=
+  , "case 3" ~: test $ runQuery "?x" "(адрес ?x (Сламервилл . ?y))" >>=
       assertEqual "case3" (parseMultiSet "(Фиден Кон) (Дум Хьюго) (Битобор Бен)")
 
-  , test $ runQuery "(?x ?y)" "(and (начальник ?x (Битобор Бен)) (адрес ?x ?y))" >>=
+  , "case AND" ~: test $ runQuery "(?x ?y)" "(and (начальник ?x (Битобор Бен)) (адрес ?x ?y))" >>=
       assertEqual "case4" (parseMultiSet
         "((Поправич Дайко) (Бостон (Бэй Стейт Роуд) 22))\
         \((Фект Пабло Э)    (Кембридж (Эймс Стрит) 3))\
         \((Хакер Лиза П)    (Кембридж (Массачусетс Авеню) 78))")
 
-  , test $ runQuery "(?person ?his-boss ?z2)"
+  , "case NOT" ~: test $ runQuery "(?person ?his-boss ?z2)"
         "(and \
         \(начальник ?person ?his-boss) \
         \(not (должность ?his-boss (компьютеры . ?z1))) \
@@ -361,26 +360,26 @@ tests db = TestList
 
 -- rules
 
-  , test $ runQuery "?x" "(живет-около ?x (Битобор Бен))" >>=
-      assertEqual "caseR1" (parseMultiSet "(Фиден Кон) (Дум Хьюго)")
+  , "rule 1" ~: test $ runQuery "?x" "(живет-около ?x (Битобор Бен))" >>=
+      assertEqual "" (parseMultiSet "(Фиден Кон) (Дум Хьюго)")
 
-  , test $ runQuery "?x" "(can-replace ?x (Фект Пабло Э))" >>=
-      assertEqual "caseR2" (parseMultiSet "(Битобор Бен) (Хакер Лиза П)")
+  , "rule 2 can-replace" ~: test $ runQuery "?x" "(can-replace ?x (Фект Пабло Э))" >>=
+      assertEqual "" (parseMultiSet "(Битобор Бен) (Хакер Лиза П)")
 
-  , test $ runQuery "?x" "(independent ?x)" >>=
-      assertEqual "caseR3" (parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)")
+  , "rule 3 independent" ~: test $ runQuery "?x" "(independent ?x)" >>=
+      assertEqual "" (parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)")
 
-  , test $ runQuery "(?time ?who)" "(совещание ?who (пятница ?time))" >>=
-      assertEqual "caseR4" (parseMultiSet "(13 администрация)")
+  , "rule 4 " ~: test $ runQuery "(?time ?who)" "(совещание ?who (пятница ?time))" >>=
+      assertEqual "" (parseMultiSet "(13 администрация)")
 
-  , test $ runQuery "?day-and-time" "(время-совещания (Хакер Лиза П) ?day-and-time)" >>=
-      assertEqual "caseR5" (parseMultiSet "(среда 16) (среда 15)")
+  , "rule 5" ~: test $ runQuery "?day-and-time" "(время-совещания (Хакер Лиза П) ?day-and-time)" >>=
+      assertEqual "" (parseMultiSet "(среда 16) (среда 15)")
 
-  , test $ runQuery "?time" "(время-совещания (Хакер Лиза П) (среда ?time))" >>=
-      assertEqual "caseR6" (parseMultiSet "16 15")
+  , "rule 6" ~: test $ runQuery "?time" "(время-совещания (Хакер Лиза П) (среда ?time))" >>=
+      assertEqual "" (parseMultiSet "16 15")
 
-  , test $ runQuery "(?p1 ?p2)" "(живет-около ?p1 ?p2)" >>=
-      assertEqual "caseR7" (parseMultiSet
+  , "rule 7" ~: test $ runQuery "(?p1 ?p2)" "(живет-около ?p1 ?p2)" >>=
+      assertEqual "" (parseMultiSet
         "((Фиден Кон) (Дум Хьюго))\
         \((Фиден Кон) (Битобор Бен))\
         \((Дум Хьюго) (Фиден Кон))\
@@ -390,60 +389,60 @@ tests db = TestList
         \((Битобор Бен) (Фиден Кон))\
         \((Битобор Бен) (Дум Хьюго))")
 
-  , test $ runQuery "?z" "(append-to-form (a b) (c d) ?z)" >>=
-      assertEqual "caseR8" (parseMultiSet "(a b c d)")
+  , "rule 8 append-to-form" ~: test $ runQuery "?z" "(append-to-form (a b) (c d) ?z)" >>=
+      assertEqual "" (parseMultiSet "(a b c d)")
 
-  , test $ runQuery "?y" "(append-to-form (a b) ?y (a b c d))" >>=
-      assertEqual "caseR9" (parseMultiSet "(c d)")
+  , "rule 9 append-to-form" ~: test $ runQuery "?y" "(append-to-form (a b) ?y (a b c d))" >>=
+      assertEqual "" (parseMultiSet "(c d)")
 
-  , test $ runQuery "(?x ?y)" "(append-to-form ?x ?y (a b c d))" >>=
-      assertEqual "caseR10" (parseMultiSet
+  , "rule 10 append-to-form" ~: test $ runQuery "(?x ?y)" "(append-to-form ?x ?y (a b c d))" >>=
+      assertEqual "" (parseMultiSet
         "((a b c d) ())\
         \(() (a b c d))\
         \((a) (b c d))\
         \((a b) (c d))\
         \((a b c) (d))")
 
-  , test $ runQuery "?x" "(last-pair (3) ?x)" >>=
-      assertEqual "caseR11" (parseMultiSet "3")
+  , "rule 11 last-pair" ~: test $ runQuery "?x" "(last-pair (3) ?x)" >>=
+      assertEqual "" (parseMultiSet "3")
 
-  , test $ runQuery "?x" "(last-pair (1 2 3) ?x)" >>=
-      assertEqual "caseR12" (parseMultiSet "3")
+  , "rule 12 last-pair" ~: test $ runQuery "?x" "(last-pair (1 2 3) ?x)" >>=
+      assertEqual "" (parseMultiSet "3")
 
-  , test $ runQuery "?x" "(last-pair (2 ?x) (3))" >>=
-      assertEqual "caseR13" (parseMultiSet "(3)")
+  , "rule 13 last-pair" ~: test $ runQuery "?x" "(last-pair (2 ?x) (3))" >>=
+      assertEqual "" (parseMultiSet "(3)")
 
-  , test $ runQuery "(?x ?y)" "(?x next-to ?y in (1 (2 3) 4))" >>=
-      assertEqual "caseR14" (parseMultiSet "((2 3) 4) (1 (2 3))")
+  , "rule 14 next-to" ~: test $ runQuery "(?x ?y)" "(?x next-to ?y in (1 (2 3) 4))" >>=
+      assertEqual "" (parseMultiSet "((2 3) 4) (1 (2 3))")
 
-  , test $ runQuery "?x" "(?x next-to 1 in (2 1 3 1))" >>=
-      assertEqual "caseR15" (parseMultiSet "2 3")
+  , "rule 15 next-to" ~: test $ runQuery "?x" "(?x next-to 1 in (2 1 3 1))" >>=
+      assertEqual "" (parseMultiSet "2 3")
 
-  , test $ assertEqual "properList1" (properList Nil) (Just [])
-  , test $ assertEqual "properList2" (properList (Atom "x" `Pair` Nil)) (Just [Atom "x"])
-  , test $ assertEqual "properList3" (properList (Atom "x" `Pair` Atom "b")) Nothing
+  , "properList1" ~: test $ assertEqual "" (properList Nil) (Just [])
+  , "properList2" ~: test $ assertEqual "" (properList (Atom "x" `Pair` Nil)) (Just [Atom "x"])
+  , "properList3" ~: test $ assertEqual "" (properList (Atom "x" `Pair` Atom "b")) Nothing
 
-  , test $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
-      assertEqual "caseR16" (parseMultiSet "(Уорбак Оливер)")
-  , test $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
-      assertEqual "caseR17" (parseMultiSet "(Уорбак Оливер)")
+  , "rule 16" ~: test $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
+      assertEqual "" (parseMultiSet "(Уорбак Оливер)")
+  , "rule 17" ~: test $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
+      assertEqual "" (parseMultiSet "(Уорбак Оливер)")
 
-  , test $ runQuery "?x" "(reverse () ?x)" >>=
-      assertEqual "reverse1" (parseMultiSet "()")
-  , test $ runQuery "?x" "(reverse ?x ())" >>=
-      assertEqual "reverse2" (parseMultiSet "()")
-  , test $ runQuery "?x" "(reverse (a) ?x)" >>=
-      assertEqual "reverse3" (parseMultiSet "(a)")
-  , test $ runQuery "?x" "(reverse ?x (a))" >>=
-      assertEqual "reverse4" (parseMultiSet "(a)")
-  , test $ runQuery "?x" "(reverse (a b c d) ?x)" >>=
-      assertEqual "reverse5" (parseMultiSet "(d c b a)")
-  , test $ runQuery "?x" "(reverse ?x (a b c d))" >>=
-      assertEqual "reverse6" (parseMultiSet "(d c b a)")
-  , test $ runQuery "?x" "(reverse (a b c d e) ?x)" >>=
-      assertEqual "reverse7" (parseMultiSet "(e d c b a)")
-  , test $ runQuery "?x" "(reverse ?x (a b c d e))" >>=
-      assertEqual "reverse8" (parseMultiSet "(e d c b a)")
+  , "rule 18 reverse" ~: test $ runQuery "?x" "(reverse () ?x)" >>=
+      assertEqual "" (parseMultiSet "()")
+  , "rule 19 reverse" ~: test $ runQuery "?x" "(reverse ?x ())" >>=
+      assertEqual "" (parseMultiSet "()")
+  , "rule 20 reverse" ~: test $ runQuery "?x" "(reverse (a) ?x)" >>=
+      assertEqual "" (parseMultiSet "(a)")
+  , "rule 21 reverse" ~: test $ runQuery "?x" "(reverse ?x (a))" >>=
+      assertEqual "" (parseMultiSet "(a)")
+  , "rule 22 reverse" ~: test $ runQuery "?x" "(reverse (a b c d) ?x)" >>=
+      assertEqual "" (parseMultiSet "(d c b a)")
+  , "rule 23 reverse" ~: test $ runQuery "?x" "(reverse ?x (a b c d))" >>=
+      assertEqual "" (parseMultiSet "(d c b a)")
+  , "rule 24 reverse" ~: test $ runQuery "?x" "(reverse (a b c d e) ?x)" >>=
+      assertEqual "" (parseMultiSet "(e d c b a)")
+  , "rule 25 reverse" ~: test $ runQuery "?x" "(reverse ?x (a b c d e))" >>=
+      assertEqual "" (parseMultiSet "(e d c b a)")
 
 -- lisp-value
 {-
@@ -472,7 +471,7 @@ tests db = TestList
 
     fn n = each [1 :: Int .. n]
 
-    testEqualProducer s expected actual = test $ P.toListM actual >>= assertEqual s expected
+    testEqualProducer s expected actual = TestLabel s $ test $ P.toListM actual >>= assertEqual "" expected
 
     toMultiSet :: (Ord a, Monad m) => Producer a m () -> m (MultiSet a)
     toMultiSet = P.fold (flip MultiSet.insert) MultiSet.empty id
