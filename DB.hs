@@ -131,14 +131,14 @@ negateQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame
 negateQuery z q s = s >-> P.mapM tryQ >-> P.mapFoldable id
   where
     tryQ :: Frame -> DBMonad (Maybe Frame)
-    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null $ qeval z q $ yield f)
+    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null . qeval z q . yield) f
 
 -------------------------------------------------------------------------------
 -- 4.4.4.3 Поиск утверждений с помощью сопоставления с образцом
 -------------------------------------------------------------------------------
 
 findAssertions :: Value -> Frame -> Producer Frame DBMonad ()
-findAssertions p f = (fetchAssertions p) >-> P.mapFoldable (\x -> patternMatch p x f)
+findAssertions p f = fetchAssertions p >-> P.mapFoldable (\x -> patternMatch p x f)
 
 patternMatch :: Value -> Value -> Frame -> Maybe Frame
 patternMatch (Atom ('?':pn)) d f = case Map.lookup pn f of
