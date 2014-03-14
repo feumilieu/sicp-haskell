@@ -41,6 +41,8 @@ import Text.Parsec.Text ()
 -- TODO: profiling
 -- TODO: lint
 
+-- TODO: rewrite signatures: Producer -> Producer to Pipe
+-- TODO: fix textcases -- give them names
 -- TODO: combine two levels of errors (IOError and ParseError) into one in dbParseFile
 -- TODO: introduce function [Value] -> DB, remove parser functions
 -- TODO: make `evaluate` more generic.  How?
@@ -126,30 +128,26 @@ disjoin :: Set Value -> [Value] -> Producer Frame DBMonad () -> Producer Frame D
 disjoin z = foldr (\a b s -> interleave (qeval z a s) (b s)) (const emptyStream)
 
 negateQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-negateQuery z q = mapFlattenInterleave tryQ
+negateQuery z q s = s >-> P.mapM tryQ >-> P.mapFoldable id
   where
-    tryQ f = do
-      b <- lift $ P.null $ qeval z q $ yield f
-      if b then yield f else emptyStream
+    tryQ :: Frame -> DBMonad (Maybe Frame)
+    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null $ qeval z q $ yield f)
 
 -------------------------------------------------------------------------------
 -- 4.4.4.3 Поиск утверждений с помощью сопоставления с образцом
 -------------------------------------------------------------------------------
 
 findAssertions :: Value -> Frame -> Producer Frame DBMonad ()
-findAssertions p f = mapFlattenInterleave (checkAnAssertion p f) (fetchAssertions p)
-
-checkAnAssertion :: Value -> Frame -> Value -> Producer Frame DBMonad ()
-checkAnAssertion p f a = case patternMatch p a f of
-  Just f' -> yield f'
-  Nothing -> emptyStream
+findAssertions p f = (fetchAssertions p) >-> P.mapFoldable (\x -> patternMatch p x f)
 
 patternMatch :: Value -> Value -> Frame -> Maybe Frame
 patternMatch (Atom ('?':pn)) d f = case Map.lookup pn f of
   Just pnb -> patternMatch pnb d f
   Nothing -> Just $ Map.insert pn d f
 patternMatch (Pair pl pr) (Pair dl dr) f = patternMatch pl dl f >>= patternMatch pr dr
-patternMatch p d f = if p == d then Just f else Nothing
+patternMatch p d f
+  | p == d = Just f
+  | otherwise = Nothing
 
 -------------------------------------------------------------------------------
 -- 4.4.4.4 Правила и унификация
