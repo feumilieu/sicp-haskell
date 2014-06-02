@@ -1,6 +1,8 @@
 #!/usr/bin/env runhaskell
 {-# OPTIONS_GHC -Wall #-}
 
+-- TODO: use Tasty
+
 import qualified LispParser
 import qualified DB
 
