@@ -26,9 +26,9 @@ import Text.Parsec
 import Text.PrettyPrint ( (<+>), (<>) )
 import qualified Text.PrettyPrint as PP
 
-import Test.HUnit
-import Test.QuickCheck
-
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck as QC
 
 -------------------------------------------------------------------------------
 -- Definitions
@@ -170,58 +170,55 @@ instance Arbitrary Value where
 -- Test
 -------------------------------------------------------------------------------
 
-tests :: Test
-tests = TestList
-  [ "whitespace1"     ~: parseOK    whitespace      " "             ()
-  , "whitespace2"     ~: parseOK    whitespace      "\n"            ()
-  , "lineComment1"    ~: parseOK    lineComment     "; привет \r"   ()
-  , "lineComment2"    ~: parseOK    lineComment     "; привет "     ()
-  , "nestedComment1"  ~: parseOK    nestedComment   "#||#"          ()
-  , "nestedComment2"  ~: parseOK    nestedComment   "#|#||#|#"      ()
-  , "nestedComment2"  ~: parseFail  nestedComment   "#|#||#|# "
-  , "nestedComment3"  ~: parseFail  nestedComment   "#|"
-  , "nestedComment4"  ~: parseFail  nestedComment   "#||"
-  , "nestedComment5"  ~: parseFail  nestedComment   "#|#|"
-  , "nestedComment6"  ~: parseFail  nestedComment   "#|#||#|"
-  , "space"           ~: parseOK    LispParser.space
-         "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
-  , "ident"           ~: parseOK    lispAtom      "!013-x ; Вот!" (Atom "!013-x")
-  , "ident"           ~: parseFail  lispAtom      ".xx"
-  , "bool1"           ~: parseOK    lispBool      "#t "           (Bool True)
-  , "bool2"           ~: parseOK    lispBool      "#f "           (Bool False)
-  , "Integer1"        ~: parseOK    lispInteger   "123 "          (Integer 123)
-  , "Integer2"        ~: parseOK    lispInteger   "-0666 ; FIXME" (Integer (-666))
-  , "string1"         ~: parseOK    lispString    "\"Wow!\" #| Here you are |# " (String "Wow!")
-  , "string2"         ~: parseOK    lispString    "\"\\\"\\\\\\t\" "  (String "\"\\\t")
-  , "string3"         ~: parseFail  lispString    "\\w "
-  , "pair1"           ~: parseOK    lispPair      "( ) "          Nil
-  , "pair1x"          ~: parseOK    lispPair      "(()) "         (Pair Nil Nil)
-  , "pair2"           ~: parseOK    lispPair      "( x ) "        (Pair (Atom "x") Nil)
-  , "pair3"           ~: parseOK    lispPair      "( -23) "       (Pair (Integer (-23)) Nil)
-  , "pair4"           ~: parseOK    lispPair      "(\"oops\") "   (Pair (String "oops") Nil)
-  , "pair5"           ~: parseOK    lispPair      "(() \"oops\")" (Pair Nil (Pair (String "oops") Nil))
-  , "pair6"           ~: parseOK    lispPair      "(().()) "      (Pair Nil Nil)
-  , "pair7"           ~: parseOK    lispPair      "(().\"oops\")" (Pair Nil (String "oops"))
-  , "pair8"           ~: parseOK    lispPair      "(\"oops\".())" (Pair (String "oops") Nil)
-  , "pair9"           ~: parseOK    lispPair      "( #t . () ) "  (Pair (Bool True) Nil)
-  , "pair10"          ~: parseOK    lispPair      "( () . #f ) "  (Pair Nil (Bool False))
-  , "pair11"          ~: parseOK    lispPair      "(a b c) "      (Pair (Atom "a") (Pair (Atom "b") (Pair (Atom "c") Nil)))
-  , "pair12"          ~: parseOK    lispPair      "(a b . c) "    (Pair (Atom "a") (Pair (Atom "b") (Atom "c")))
-  , "pair13"          ~: parseFail  lispPair      "(a . b c) "
+tests :: TestTree
+tests = testGroup "LispParser"
+  [ testCase "whitespace1"     $ parseOK    whitespace      " "             ()
+  , testCase "whitespace2"     $ parseOK    whitespace      "\n"            ()
+  , testCase "lineComment1"    $ parseOK    lineComment     "; привет \r"   ()
+  , testCase "lineComment2"    $ parseOK    lineComment     "; привет "     ()
+  , testCase "nestedComment1"  $ parseOK    nestedComment   "#||#"          ()
+  , testCase "nestedComment2"  $ parseOK    nestedComment   "#|#||#|#"      ()
+  , testCase "nestedComment2"  $ parseFail  nestedComment   "#|#||#|# "
+  , testCase "nestedComment3"  $ parseFail  nestedComment   "#|"
+  , testCase "nestedComment4"  $ parseFail  nestedComment   "#||"
+  , testCase "nestedComment5"  $ parseFail  nestedComment   "#|#|"
+  , testCase "nestedComment6"  $ parseFail  nestedComment   "#|#||#|"
+  , testCase "space"           $ parseOK    LispParser.space "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
+  , testCase "ident"           $ parseOK    lispAtom      "!013-x ; Вот!" (Atom "!013-x")
+  , testCase "ident"           $ parseFail  lispAtom      ".xx"
+  , testCase "bool1"           $ parseOK    lispBool      "#t "           (Bool True)
+  , testCase "bool2"           $ parseOK    lispBool      "#f "           (Bool False)
+  , testCase "Integer1"        $ parseOK    lispInteger   "123 "          (Integer 123)
+  , testCase "Integer2"        $ parseOK    lispInteger   "-0666 ; FIXME" (Integer (-666))
+  , testCase "string1"         $ parseOK    lispString    "\"Wow!\" #| Here you are |# " (String "Wow!")
+  , testCase "string2"         $ parseOK    lispString    "\"\\\"\\\\\\t\" "  (String "\"\\\t")
+  , testCase "string3"         $ parseFail  lispString    "\\w "
+  , testCase "pair1"           $ parseOK    lispPair      "( ) "          Nil
+  , testCase "pair1x"          $ parseOK    lispPair      "(()) "         (Pair Nil Nil)
+  , testCase "pair2"           $ parseOK    lispPair      "( x ) "        (Pair (Atom "x") Nil)
+  , testCase "pair3"           $ parseOK    lispPair      "( -23) "       (Pair (Integer (-23)) Nil)
+  , testCase "pair4"           $ parseOK    lispPair      "(\"oops\") "   (Pair (String "oops") Nil)
+  , testCase "pair5"           $ parseOK    lispPair      "(() \"oops\")" (Pair Nil (Pair (String "oops") Nil))
+  , testCase "pair6"           $ parseOK    lispPair      "(().()) "      (Pair Nil Nil)
+  , testCase "pair7"           $ parseOK    lispPair      "(().\"oops\")" (Pair Nil (String "oops"))
+  , testCase "pair8"           $ parseOK    lispPair      "(\"oops\".())" (Pair (String "oops") Nil)
+  , testCase "pair9"           $ parseOK    lispPair      "( #t . () ) "  (Pair (Bool True) Nil)
+  , testCase "pair10"          $ parseOK    lispPair      "( () . #f ) "  (Pair Nil (Bool False))
+  , testCase "pair11"          $ parseOK    lispPair      "(a b c) "      (Pair (Atom "a") (Pair (Atom "b") (Pair (Atom "c") Nil)))
+  , testCase "pair12"          $ parseOK    lispPair      "(a b . c) "    (Pair (Atom "a") (Pair (Atom "b") (Atom "c")))
+  , testCase "pair13"          $ parseFail  lispPair      "(a . b c) "
   ]
   where
-    parseOK parser str expected = test $ case parse (parser <* eof) "" str of
+    parseOK parser str expected = case parse (parser <* eof) "" str of
       Left e -> assertFailure $ show e
       Right actual -> assertEqual "" expected actual
 
-    parseFail parser str = test $ case parse (parser <* eof) "" str of
+    parseFail parser str = case parse (parser <* eof) "" str of
       Left _ -> return ()
       Right x -> assertFailure $ "parser returned: " ++ show x
 
-propValue :: Value -> Bool
-propValue x = either (const False) (== x) $ parse lispExpr "" $ show $ toDoc x
+propValue' :: Value -> Bool
+propValue' x = either (const False) (== x) $ parse lispExpr "" $ show $ toDoc x
 
-
-
-
-
+propValue :: TestTree
+propValue = QC.testProperty "LispParser QuickCheck" propValue'
