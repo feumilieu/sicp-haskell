@@ -58,13 +58,26 @@ import Test.Tasty.HUnit
 type Frame = Map.Map String Value
 type Rule = (Value, Value)
 
-type DBMonad = ReaderT DB (StateT Int IO)
+type DBMonad = ReaderT (Set Value, DB) (StateT Int IO)
 
 runDBMonad :: DB -> DBMonad a -> IO a
-runDBMonad db m = evalStateT (runReaderT m db) 0
+runDBMonad db m = evalStateT (runReaderT m (Set.empty, db)) 0
 
 tick :: DBMonad Int
 tick = state $ \s -> (s, s + 1)
+
+{-
+askZ :: DBMonad (Set Value)
+askZ = liftM fst ask
+
+localAddValue :: Value -> DBMonad () -> DBMonad ()
+localAddValue v m = local f m
+  where
+    f (z, db) = (Set.insert v z, db)
+-}
+
+askDB :: DBMonad DB
+askDB = liftM snd ask
 
 -------------------------------------------------------------------------------
 -- 4.4.4.1 Управляющий цикл и конкретизация
@@ -273,8 +286,8 @@ dbParseFile fname = runP dbParser () fname `liftM` T.readFile fname
 
 fetch :: Indexable a => (DB -> [a]) -> (DB -> MapStrict.Map String [a]) -> Value -> Producer a DBMonad ()
 fetch sf sif p = case index p of
-  Nothing -> liftM sf (lift ask) >>= each
-  Just i -> liftM sif (lift ask) >>= (maybe emptyStream each . MapStrict.lookup i)
+  Nothing -> liftM sf (lift askDB) >>= each
+  Just i -> liftM sif (lift askDB) >>= (maybe emptyStream each . MapStrict.lookup i)
 
 fetchAssertions :: Value -> Producer Value DBMonad ()
 fetchAssertions = fetch assertions assertionsIndexed
