@@ -66,15 +66,13 @@ runDBMonad db m = evalStateT (runReaderT m (Set.empty, db)) 0
 tick :: DBMonad Int
 tick = state $ \s -> (s, s + 1)
 
-{-
 askZ :: DBMonad (Set Value)
 askZ = liftM fst ask
 
-localAddValue :: Value -> DBMonad () -> DBMonad ()
-localAddValue v m = local f m
+localAddValue :: Value -> DBMonad a -> DBMonad a
+localAddValue v = local f
   where
     f (z, db) = (Set.insert v z, db)
--}
 
 askDB :: DBMonad DB
 askDB = liftM snd ask
@@ -99,7 +97,7 @@ instantiate e frame = copy e
 fixValue' :: Value -> S.State [String] Value
 fixValue' (Atom ('?':n)) = Atom <$> fixName n
   where
-    fixName :: String -> S.State [String] (String)
+    fixName :: String -> S.State [String] String
     fixName name = do
       names <- get
       case elemIndex name names of
@@ -115,17 +113,17 @@ fixValue v f = evalState (fixValue' $ instantiate v f) []
 
 -------------------------------------------------------------------------------
 
-qeval :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-qeval z (Atom "and" `Pair` q)
-  | isJust plq = conjoin z $ fromJust plq
+qeval :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+qeval (Atom "and" `Pair` q)
+  | isJust plq = conjoin $ fromJust plq
   where plq = properList q
-qeval z (Atom "or" `Pair` q)
-  | isJust plq = disjoin z $ fromJust plq
+qeval (Atom "or" `Pair` q)
+  | isJust plq = disjoin $ fromJust plq
   where plq = properList q
-qeval z (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery z q
-qeval _ (Atom "lisp-value"  `Pair` _) = undefined
-qeval _ (Atom "always-true" `Pair` _) = id
-qeval z q = simpleQuery z q
+qeval (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery q
+qeval (Atom "lisp-value"  `Pair` _) = undefined
+qeval (Atom "always-true" `Pair` _) = id
+qeval q = simpleQuery q
 
 properList :: Value -> Maybe [Value]
 properList (x `Pair` xs) = (x:) <$> properList xs
@@ -133,22 +131,22 @@ properList Nil = Just []
 properList _ = Nothing
 
 evaluate :: DB -> Value -> Value -> (Value -> IO ()) -> IO ()
-evaluate db q o f = runDBMonad db $ runEffect $ qeval Set.empty q (yield Map.empty) >-> P.map (instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
+evaluate db q o f = runDBMonad db $ runEffect $ qeval q (yield Map.empty) >-> P.map (instantiate o) >-> P.mapM (liftIO . f) >-> P.drain
 
-simpleQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-simpleQuery z q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules z q f)
+simpleQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+simpleQuery q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules q f)
 
-conjoin :: Set Value -> [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-conjoin z = foldr (\a b -> b . qeval z a) id
+conjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+conjoin = foldr (\a b -> b . qeval a) id
 
-disjoin :: Set Value -> [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-disjoin z = foldr (\a b s -> interleave (qeval z a s) (b s)) (const emptyStream)
+disjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+disjoin = foldr (\a b s -> interleave (qeval a s) (b s)) (const emptyStream)
 
-negateQuery :: Set Value -> Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-negateQuery z q s = s >-> P.mapM tryQ >-> P.mapFoldable id
+negateQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+negateQuery q s = s >-> P.mapM tryQ >-> P.mapFoldable id
   where
     tryQ :: Frame -> DBMonad (Maybe Frame)
-    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null . qeval z q . yield) f
+    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null . qeval q . yield) f
 
 -------------------------------------------------------------------------------
 -- 4.4.4.3 Поиск утверждений с помощью сопоставления с образцом
@@ -170,19 +168,20 @@ patternMatch p d f
 -- 4.4.4.4 Правила и унификация
 -------------------------------------------------------------------------------
 
-applyRules :: Set Value -> Value -> Frame -> Producer Frame DBMonad ()
-applyRules z p f = mapFlattenInterleave (applyARule z p f) (fetchRules p)
+applyRules :: Value -> Frame -> Producer Frame DBMonad ()
+applyRules p f = mapFlattenInterleave (applyARule p f) (fetchRules p)
 
-applyARule :: Set Value -> Value -> Frame -> Rule -> Producer Frame DBMonad ()
-applyARule z p f (c, b) = do
+applyARule :: Value -> Frame -> Rule -> Producer Frame DBMonad ()
+applyARule p f (c, b) = do
   serial <- lift tick
   let cRenamed = renameVariables c serial
   case unifyMatch p cRenamed f of
     Just ff -> do
       let xn = fixValue cRenamed ff
-      if Set.member xn z
+      alreadySeen <- lift $ liftM (Set.member xn) askZ
+      if alreadySeen
         then emptyStream
-        else qeval (Set.insert xn z) (renameVariables b serial) $ yield ff
+        else hoist (localAddValue xn) $ qeval (renameVariables b serial) (yield ff)
     Nothing -> emptyStream
 
 renameVariables :: Value -> Int -> Value
@@ -349,53 +348,53 @@ tests db = testGroup "DB"
 -- assertions
 
   , testCase "case 1" $ runQuery "?x" "(начальник ?x (Битобор Бен))" >>=
-      (@?= (parseMultiSet "(Хакер Лиза П)  (Фект Пабло Э) (Поправич Дайко)"))
+      (@?= parseMultiSet "(Хакер Лиза П)  (Фект Пабло Э) (Поправич Дайко)")
 
   , testCase "case 2" $ runQuery "?x" "(должность ?x (бухгалтерия . ?y))" >>=
-      (@?= (parseMultiSet "(Крэтчит Роберт) (Скрудж Эбин)"))
+      (@?= parseMultiSet "(Крэтчит Роберт) (Скрудж Эбин)")
 
   , testCase "case 3" $ runQuery "?x" "(адрес ?x (Сламервилл . ?y))" >>=
-      (@?= (parseMultiSet "(Фиден Кон) (Дум Хьюго) (Битобор Бен)"))
+      (@?= parseMultiSet "(Фиден Кон) (Дум Хьюго) (Битобор Бен)")
 
   , testCase "case AND" $ runQuery "(?x ?y)" "(and (начальник ?x (Битобор Бен)) (адрес ?x ?y))" >>=
-      (@?= (parseMultiSet
+      (@?= parseMultiSet
         "((Поправич Дайко) (Бостон (Бэй Стейт Роуд) 22))\
         \((Фект Пабло Э)    (Кембридж (Эймс Стрит) 3))\
-        \((Хакер Лиза П)    (Кембридж (Массачусетс Авеню) 78))"))
+        \((Хакер Лиза П)    (Кембридж (Массачусетс Авеню) 78))")
 
   , testCase "case NOT" $ runQuery "(?person ?his-boss ?z2)"
         "(and \
         \(начальник ?person ?his-boss) \
         \(not (должность ?his-boss (компьютеры . ?z1))) \
         \(должность ?his-boss ?z2))" >>=
-      (@?= (parseMultiSet
+      (@?= parseMultiSet
         "((Фиден Кон) (Уорбак Оливер) (администрация большая шишка))\
         \((Крэтчит Роберт) (Скрудж Эбин) (бухгалтерия главный бухгалтер))\
         \((Скрудж Эбин) (Уорбак Оливер) (администрация большая шишка))\
-        \((Битобор Бен) (Уорбак Оливер) (администрация большая шишка))"))
+        \((Битобор Бен) (Уорбак Оливер) (администрация большая шишка))")
 
 -- rules
 
   , testCase "rule 1" $ runQuery "?x" "(живет-около ?x (Битобор Бен))" >>=
-      (@?= (parseMultiSet "(Фиден Кон) (Дум Хьюго)"))
+      (@?= parseMultiSet "(Фиден Кон) (Дум Хьюго)")
 
   , testCase "rule 2 can-replace" $ runQuery "?x" "(can-replace ?x (Фект Пабло Э))" >>=
-      (@?= (parseMultiSet "(Битобор Бен) (Хакер Лиза П)"))
+      (@?= parseMultiSet "(Битобор Бен) (Хакер Лиза П)")
 
   , testCase "rule 3 independent" $ runQuery "?x" "(independent ?x)" >>=
-      (@?= (parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)"))
+      (@?= parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)")
 
   , testCase "rule 4 " $ runQuery "(?time ?who)" "(совещание ?who (пятница ?time))" >>=
-      (@?= (parseMultiSet "(13 администрация)"))
+      (@?= parseMultiSet "(13 администрация)")
 
   , testCase "rule 5" $ runQuery "?day-and-time" "(время-совещания (Хакер Лиза П) ?day-and-time)" >>=
-      (@?= (parseMultiSet "(среда 16) (среда 15)"))
+      (@?= parseMultiSet "(среда 16) (среда 15)")
 
   , testCase "rule 6" $ runQuery "?time" "(время-совещания (Хакер Лиза П) (среда ?time))" >>=
-      (@?= (parseMultiSet "16 15"))
+      (@?= parseMultiSet "16 15")
 
   , testCase "rule 7" $ runQuery "(?p1 ?p2)" "(живет-около ?p1 ?p2)" >>=
-      (@?= (parseMultiSet
+      (@?= parseMultiSet
         "((Фиден Кон) (Дум Хьюго))\
         \((Фиден Кон) (Битобор Бен))\
         \((Дум Хьюго) (Фиден Кон))\
@@ -403,62 +402,62 @@ tests db = testGroup "DB"
         \((Хакер Лиза П) (Фект Пабло Э))\
         \((Фект Пабло Э) (Хакер Лиза П))\
         \((Битобор Бен) (Фиден Кон))\
-        \((Битобор Бен) (Дум Хьюго))"))
+        \((Битобор Бен) (Дум Хьюго))")
 
   , testCase "rule 8 append-to-form" $ runQuery "?z" "(append-to-form (a b) (c d) ?z)" >>=
-      (@?= (parseMultiSet "(a b c d)"))
+      (@?= parseMultiSet "(a b c d)")
 
   , testCase "rule 9 append-to-form" $ runQuery "?y" "(append-to-form (a b) ?y (a b c d))" >>=
-      (@?= (parseMultiSet "(c d)"))
+      (@?= parseMultiSet "(c d)")
 
   , testCase "rule 10 append-to-form" $ runQuery "(?x ?y)" "(append-to-form ?x ?y (a b c d))" >>=
-      (@?= (parseMultiSet
+      (@?= parseMultiSet
         "((a b c d) ())\
         \(() (a b c d))\
         \((a) (b c d))\
         \((a b) (c d))\
-        \((a b c) (d))"))
+        \((a b c) (d))")
 
   , testCase "rule 11 last-pair" $ runQuery "?x" "(last-pair (3) ?x)" >>=
-      (@?= (parseMultiSet "3"))
+      (@?= parseMultiSet "3")
 
   , testCase "rule 12 last-pair" $ runQuery "?x" "(last-pair (1 2 3) ?x)" >>=
-      (@?= (parseMultiSet "3"))
+      (@?= parseMultiSet "3")
 
   , testCase "rule 13 last-pair" $ runQuery "?x" "(last-pair (2 ?x) (3))" >>=
-      (@?= (parseMultiSet "(3)"))
+      (@?= parseMultiSet "(3)")
 
   , testCase "rule 14 next-to" $ runQuery "(?x ?y)" "(?x next-to ?y in (1 (2 3) 4))" >>=
-      (@?= (parseMultiSet "((2 3) 4) (1 (2 3))"))
+      (@?= parseMultiSet "((2 3) 4) (1 (2 3))")
 
   , testCase "rule 15 next-to" $ runQuery "?x" "(?x next-to 1 in (2 1 3 1))" >>=
-      (@?=  (parseMultiSet "2 3"))
+      (@?=  parseMultiSet "2 3")
 
-  , testCase "properList1" ((properList Nil) @?= (Just []))
-  , testCase "properList2" ((properList (Atom "x" `Pair` Nil)) @?= (Just [Atom "x"]))
-  , testCase "properList3" ((properList (Atom "x" `Pair` Atom "b")) @?= Nothing)
+  , testCase "properList1" (properList Nil @?= Just [])
+  , testCase "properList2" (properList (Atom "x" `Pair` Nil) @?= Just [Atom "x"])
+  , testCase "properList3" (properList (Atom "x" `Pair` Atom "b") @?= Nothing)
 
   , testCase "rule 16" $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
-      (@?=  (parseMultiSet "(Уорбак Оливер)"))
+      (@?=  parseMultiSet "(Уорбак Оливер)")
   , testCase "rule 17" $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
-      (@?=  (parseMultiSet "(Уорбак Оливер)"))
+      (@?=  parseMultiSet "(Уорбак Оливер)")
 
   , testCase "rule 18 reverse" $ runQuery "?x" "(reverse () ?x)" >>=
-      (@?= (parseMultiSet "()"))
+      (@?= parseMultiSet "()")
   , testCase "rule 19 reverse" $ runQuery "?x" "(reverse ?x ())" >>=
-      (@?= (parseMultiSet "()"))
+      (@?= parseMultiSet "()")
   , testCase "rule 20 reverse" $ runQuery "?x" "(reverse (a) ?x)" >>=
-      (@?= (parseMultiSet "(a)"))
+      (@?= parseMultiSet "(a)")
   , testCase "rule 21 reverse" $ runQuery "?x" "(reverse ?x (a))" >>=
-      (@?= (parseMultiSet "(a)"))
+      (@?= parseMultiSet "(a)")
   , testCase "rule 22 reverse" $ runQuery "?x" "(reverse (a b c d) ?x)" >>=
-      (@?= (parseMultiSet "(d c b a)"))
+      (@?= parseMultiSet "(d c b a)")
   , testCase "rule 23 reverse" $ runQuery "?x" "(reverse ?x (a b c d))" >>=
-      (@?= (parseMultiSet "(d c b a)"))
+      (@?= parseMultiSet "(d c b a)")
   , testCase "rule 24 reverse" $ runQuery "?x" "(reverse (a b c d e) ?x)" >>=
-      (@?= (parseMultiSet "(e d c b a)"))
+      (@?= parseMultiSet "(e d c b a)")
   , testCase "rule 25 reverse" $ runQuery "?x" "(reverse ?x (a b c d e))" >>=
-      (@?= (parseMultiSet "(e d c b a)"))
+      (@?= parseMultiSet "(e d c b a)")
 
 -- lisp-value
 {-
@@ -493,7 +492,7 @@ tests db = testGroup "DB"
     toMultiSet = P.fold (flip MultiSet.insert) MultiSet.empty id
 
     runQuery :: String -> String -> IO (MultiSet Value)
-    runQuery o q = (MultiSet.map $ instantiate $ read o) `liftM` (runDBMonad db $ toMultiSet $ qeval Set.empty (read q) $ yield Map.empty)
+    runQuery o q = MultiSet.map (instantiate $ read o) `liftM` runDBMonad db (toMultiSet $ qeval (read q) $ yield Map.empty)
 
     parseMultiSet :: String -> MultiSet Value
     parseMultiSet s = case parse (LispParser.space >> many lispExpr <* eof) "" s of
