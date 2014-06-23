@@ -14,7 +14,6 @@ module LispParser
   , lispSpace
   , parseFile
   , toDoc
-  , propValue
   , tests
   ) where
 
@@ -31,7 +30,6 @@ import qualified Text.PrettyPrint as PP
 
 import Test.Tasty
 import Test.Tasty.HUnit
-import Test.Tasty.QuickCheck as QC
 
 -------------------------------------------------------------------------------
 -- Definitions
@@ -223,8 +221,3 @@ tests = testGroup "LispParser internal"
       Left _ -> return ()
       Right x -> assertFailure $ "parser returned: " ++ show x
 
-propValue' :: Value -> Bool
-propValue' x = either (const False) (== x) $ parse lispExpr "" $ show $ toDoc x
-
-propValue :: TestTree
-propValue = QC.testProperty "LispParser QuickCheck" propValue'

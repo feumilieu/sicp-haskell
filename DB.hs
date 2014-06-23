@@ -27,9 +27,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 -- TODO: profiling
--- TODO: lint
 
--- TODO: rewrite signatures: Producer -> Producer to Pipe
+-- TODO: rewrite (Producer -> Producer) as Pipe
 
 -- TODO: (from Tasty webhome) Re-organize the project into a library and a program, 
 --       so that both the program and the test suite depend on this new library.

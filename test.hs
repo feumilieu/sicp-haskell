@@ -7,11 +7,13 @@ import DB
 import Text.Parsec
 
 import Control.Applicative ( (<*) )
-import Test.Tasty
-import Test.Tasty.HUnit
 
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
+
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck as QC
 
 dbTests :: [LispParser.Value] -> TestTree
 dbTests db = testGroup "DB"
@@ -163,10 +165,15 @@ dbTests db = testGroup "DB"
           Left e -> error $ show e
           Right x -> MultiSet.fromList x
 
+propValue' :: Value -> Bool
+propValue' x = either (const False) (== x) $ parse lispExpr "" $ show $ toDoc x
+
+propValue :: TestTree
+propValue = QC.testProperty "LispParser QuickCheck" propValue'
 
 main :: IO ()
 main = do
     edb <- parseFile "data.txt"
     case edb of
         Left e -> print e
-        Right db -> defaultMain $ testGroup "Tests" [ LispParser.tests, LispParser.propValue, DB.tests db, dbTests db ]
+        Right db -> defaultMain $ testGroup "Tests" [ LispParser.tests, propValue, DB.tests db, dbTests db ]
