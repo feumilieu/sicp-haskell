@@ -12,7 +12,7 @@ import Control.Exception
 import System.Console.Haskeline hiding (catch)
 import System.Environment
 
-repl :: DB -> IO ()
+repl :: [Value] -> IO ()
 repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
     where
 
@@ -29,7 +29,7 @@ repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
 
         runQuery :: Value -> InputT IO ()
         runQuery x = do
-            v <- withInterrupt $ liftIO $ tryInterrupt $ DB.evaluate db x x print
+            v <- withInterrupt $ liftIO $ tryInterrupt $ DB.evaluate db x x (\_ s -> print s) (return ()) (\_ -> return())
             case v of
                 Left e -> outputStrLn $ show e
                 Right _ -> return ()
@@ -42,7 +42,7 @@ main = do
     args <- getArgs
     case args of
         [filename] -> do
-            dbpe <- try $ DB.dbParseFile filename
+            dbpe <- try $ parseFile filename
             case dbpe of
                 Right dbp -> case dbp of
                     Right db -> repl db

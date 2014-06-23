@@ -11,6 +11,7 @@
 module LispParser
   ( Value (..)
   , lispExpr
+  , parseFile
   , LispParser.space
   , toDoc
   , propValue
@@ -19,9 +20,11 @@ module LispParser
 
 import Data.Char ( isSpace, digitToInt )
 import Control.Applicative hiding ( (<|>), many )
-import Control.Monad (void)
+import Control.Monad (void, liftM)
 
 import Text.Parsec
+import Text.Parsec.Text ()
+import qualified Data.Text.IO as T
 
 import Text.PrettyPrint ( (<+>), (<>) )
 import qualified Text.PrettyPrint as PP
@@ -115,6 +118,9 @@ lispPair          = lexeme (char '(') >> inlispPairL
 lispExpr :: Stream s m Char => ParsecT s u m Value
 lispExpr          = lispAtom <|> lispBool <|> lispInteger <|> lispString <|> lispPair
 
+parseFile :: String -> IO (Either ParseError [Value])
+parseFile fname =  runP (LispParser.space >> many LispParser.lispExpr <* eof) () fname `liftM` T.readFile fname
+
 -------------------------------------------------------------------------------
 -- Pretty print
 -------------------------------------------------------------------------------
@@ -171,7 +177,7 @@ instance Arbitrary Value where
 -------------------------------------------------------------------------------
 
 tests :: TestTree
-tests = testGroup "LispParser"
+tests = testGroup "LispParser internal"
   [ testCase "whitespace1"     $ parseOK    whitespace      " "             ()
   , testCase "whitespace2"     $ parseOK    whitespace      "\n"            ()
   , testCase "lineComment1"    $ parseOK    lineComment     "; привет \r"   ()
