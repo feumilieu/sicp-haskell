@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wall #-}
-{-# LANGUAGE FlexibleContexts #-} -- for parsec 3
 
 module DB
   ( DB.evaluate
