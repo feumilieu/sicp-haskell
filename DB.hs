@@ -115,7 +115,7 @@ properList Nil = Just []
 properList _ = Nothing
 
 evaluate :: [Value] -> Value -> Value -> (x -> Value -> IO x) -> IO x -> (x -> IO b) -> IO b
-evaluate db q o f ii ee = runDBMonad (createDB db) (foldDBMonad (\x y -> liftIO (f x y)) (liftIO ii) (liftIO . ee))
+evaluate db q o f ii ee = runDBMonad (createDB db) $ foldDBMonad (\x y -> liftIO (f x y)) (liftIO ii) (liftIO . ee)
 
   where
 

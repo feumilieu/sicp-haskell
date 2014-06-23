@@ -22,7 +22,7 @@ repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
             case minput of
                 Nothing -> return ()
                 Just input -> do
-                    case parse (LispParser.space >> lispExpr <* eof) "" input of
+                    case parse (lispSpace >> lispExpr <* eof) "" input of
                         Left e -> outputStrLn $ "Parse error: " ++ show e
                         Right x -> runQuery x
                     loop

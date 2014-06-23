@@ -11,8 +11,8 @@
 module LispParser
   ( Value (..)
   , lispExpr
+  , lispSpace
   , parseFile
-  , LispParser.space
   , toDoc
   , propValue
   , tests
@@ -51,13 +51,13 @@ instance Show Value where
 instance Read Value where
   readsPrec _ = either (const []) id . parse parsecRead' ""
     where
-      parsecRead' = fmap (:[]) $ (,) <$> (LispParser.space >> lispExpr) <*> getInput
+      parsecRead' = fmap (:[]) $ (,) <$> (lispSpace >> lispExpr) <*> getInput
 
 -------------------------------------------------------------------------------
 -- Parser
 -------------------------------------------------------------------------------
 
-whitespace, lineComment, nestedComment, space :: Stream s m Char => ParsecT s u m ()
+whitespace, lineComment, nestedComment, lispSpace :: Stream s m Char => ParsecT s u m ()
 whitespace        = void $ satisfy isSpace
 lineComment       = char ';' >> (void $ manyTill anyToken $ void (oneOf "\n\t") <|> eof)
 nestedComment     = try (string "#|") >> inNestedComment
@@ -66,10 +66,10 @@ nestedComment     = try (string "#|") >> inNestedComment
       <|> (nestedComment >> inNestedComment)
       <|> (skipMany1 (noneOf "#|") >> inNestedComment)
       <|> (oneOf "#|" >> inNestedComment)
-space             = skipMany $ whitespace <|> lineComment <|> nestedComment
+lispSpace             = skipMany $ whitespace <|> lineComment <|> nestedComment
 
 lexeme :: Stream s m Char => ParsecT s u m a -> ParsecT s u m a
-lexeme t          = t <* LispParser.space
+lexeme t          = t <* lispSpace
 
 idInitialChars, idSubsequentChars :: [Char]
 idInitialChars    = "!$%&*/:<=>?^_~"
@@ -119,7 +119,7 @@ lispExpr :: Stream s m Char => ParsecT s u m Value
 lispExpr          = lispAtom <|> lispBool <|> lispInteger <|> lispString <|> lispPair
 
 parseFile :: String -> IO (Either ParseError [Value])
-parseFile fname =  runP (LispParser.space >> many LispParser.lispExpr <* eof) () fname `liftM` T.readFile fname
+parseFile fname =  runP (lispSpace >> many LispParser.lispExpr <* eof) () fname `liftM` T.readFile fname
 
 -------------------------------------------------------------------------------
 -- Pretty print
@@ -189,7 +189,7 @@ tests = testGroup "LispParser internal"
   , testCase "nestedComment4"  $ parseFail  nestedComment   "#||"
   , testCase "nestedComment5"  $ parseFail  nestedComment   "#|#|"
   , testCase "nestedComment6"  $ parseFail  nestedComment   "#|#||#|"
-  , testCase "space"           $ parseOK    LispParser.space "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
+  , testCase "space"           $ parseOK    lispSpace     "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
   , testCase "ident"           $ parseOK    lispAtom      "!013-x ; Вот!" (Atom "!013-x")
   , testCase "ident"           $ parseFail  lispAtom      ".xx"
   , testCase "bool1"           $ parseOK    lispBool      "#t "           (Bool True)

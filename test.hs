@@ -154,12 +154,12 @@ dbTests db = testGroup "DB"
         runQuery :: String -> String -> IO (MultiSet Value)
         runQuery o q = DB.evaluate db (parseExpr q) (parseExpr o) (\ms v -> return $ MultiSet.insert v ms) (return MultiSet.empty) return
 
-        parseExpr s = case parse (LispParser.space >> lispExpr <* eof) "" s of
+        parseExpr s = case parse (lispSpace >> lispExpr <* eof) "" s of
           Left e -> error $ show e
           Right x -> x
 
         parseMultiSet :: String -> MultiSet Value
-        parseMultiSet s = case parse (LispParser.space >> many lispExpr <* eof) "" s of
+        parseMultiSet s = case parse (lispSpace >> many lispExpr <* eof) "" s of
           Left e -> error $ show e
           Right x -> MultiSet.fromList x
 
