@@ -29,6 +29,7 @@ import Test.Tasty.HUnit
 -- TODO: profiling
 
 -- TODO: rewrite (Producer -> Producer) as Pipe
+-- http://stackoverflow.com/questions/22425432/how-to-find-the-end-of-pipe
 
 -- TODO: (from Tasty webhome) Re-organize the project into a library and a program, 
 --       so that both the program and the test suite depend on this new library.

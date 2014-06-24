@@ -30,6 +30,7 @@ import qualified Text.PrettyPrint as PP
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.QuickCheck
 
 -------------------------------------------------------------------------------
 -- Definitions
