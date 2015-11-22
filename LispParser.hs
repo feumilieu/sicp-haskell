@@ -18,7 +18,6 @@ module LispParser
   ) where
 
 import Data.Char ( isSpace, digitToInt )
-import Control.Applicative hiding ( (<|>), many )
 import Control.Monad (void, liftM)
 
 import Text.Parsec

@@ -3,47 +3,36 @@
 
 name:                SICP
 version:             0.1.0.0
--- synopsis:            
--- description:         
+synopsis:            Exercises from SICP in Haskell
+description:         Please see README.md
 license:             BSD3
 license-file:        LICENSE
 author:              Aleksey Makarov
 maintainer:          aleksey.makarov@gmail.com
--- copyright:           
--- category:            
+copyright:           2015 Aleksey Makarov
+category:            Education
 build-type:          Simple
--- extra-source-files:  
+extra-source-files:
 cabal-version:       >=1.10
 
 executable SICP
   main-is:             Main.hs
-  -- other-modules:       
-  other-extensions:    FlexibleContexts
   build-depends:       
-      base >=4.7 && <4.8
-    , parsec >=3.1 && <3.2
-    , pretty >=1.1 && <1.2
-    , tasty >=0.8 && <0.9
-    , tasty-quickcheck >=0.8 && <0.9
-    , transformers >=0.4 && <0.5
-    , mtl, pipes, multiset, containers
-    , HUnit, text, tasty-hunit, haskeline
-  -- hs-source-dirs:      
-  default-language:    Haskell2010
+      base
+    , parsec
+    , pretty
+    , tasty
+    , tasty-quickcheck
+    , transformers
+    , pipes, multiset, containers
+    , HUnit, text, tasty-hunit, haskeline, QuickCheck
+  default-language:	Haskell2010
 
 Test-suite test
-  Default-language:
-    Haskell2010
-  Type:
-    exitcode-stdio-1.0
-  -- Hs-source-dirs: tests
-  Main-is:
-    test.hs
+  Default-language:	Haskell2010
+  Type:			exitcode-stdio-1.0
+  Main-is:		test.hs
   Build-depends:
-      base >= 4 && < 5
-    , tasty >= 0.7
-    , mtl, pipes, multiset, containers, HUnit, text, parsec, pretty, tasty-hunit, tasty-quickcheck
-
-    -- insert the current version here
-    -- , my-project   -- depend on the library we're testing
-    -- , ...
+    base, tasty, pipes, multiset, containers,
+    HUnit, text, parsec, pretty, tasty-hunit,
+    tasty-quickcheck

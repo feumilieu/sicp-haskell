@@ -7,10 +7,9 @@ module DB
 
 import Data.Maybe
 import Data.List
-import Control.Applicative hiding (many)
 import Control.Monad
-import Control.Monad.State as S
-import Control.Monad.Reader
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State.Strict as S
 
 import Pipes
 import qualified Pipes.Prelude as P
@@ -48,7 +47,7 @@ runDBMonad :: DB -> DBMonad a -> IO a
 runDBMonad db m = evalStateT (runReaderT m (Set.empty, db)) 0
 
 tick :: DBMonad Int
-tick = state $ \s -> (s, s + 1)
+tick = lift $ state $ \s -> (s, s + 1)
 
 askZ :: DBMonad (Set Value)
 askZ = liftM fst ask

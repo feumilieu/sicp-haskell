@@ -5,7 +5,6 @@ import DB
 import LispParser
 
 import Text.Parsec hiding (try)
-import Control.Applicative
 import Control.Monad.IO.Class (liftIO)
 import Control.Exception
 
