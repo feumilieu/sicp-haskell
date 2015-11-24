@@ -1,12 +1,9 @@
-#!/usr/bin/env runhaskell
-{-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE FlexibleContexts #-} -- for parsec 3
 
-import LispParser
-import DB
+import SICP.LispParser
+import SICP.DB
 
 import Text.Parsec
-
-import Control.Applicative ( (<*) )
 
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
@@ -15,7 +12,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck as QC
 
-dbTests :: [LispParser.Value] -> TestTree
+dbTests :: [SICP.LispParser.Value] -> TestTree
 dbTests db = testGroup "DB"
 
 -- assertions
@@ -154,7 +151,7 @@ dbTests db = testGroup "DB"
     where
 
         runQuery :: String -> String -> IO (MultiSet Value)
-        runQuery o q = DB.evaluate db (parseExpr q) (parseExpr o) (\ms v -> return $ MultiSet.insert v ms) (return MultiSet.empty) return
+        runQuery o q = evaluate db (parseExpr q) (parseExpr o) (\ms v -> return $ MultiSet.insert v ms) (return MultiSet.empty) return
 
         parseExpr s = case parse (lispSpace >> lispExpr <* eof) "" s of
           Left e -> error $ show e
@@ -176,4 +173,4 @@ main = do
     edb <- parseFile "data.txt"
     case edb of
         Left e -> print e
-        Right db -> defaultMain $ testGroup "Tests" [ LispParser.tests, propValue, DB.tests db, dbTests db ]
+        Right db -> defaultMain $ testGroup "Tests" [ SICP.LispParser.tests, propValue, SICP.DB.tests db, dbTests db ]

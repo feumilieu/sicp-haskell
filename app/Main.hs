@@ -1,12 +1,10 @@
-#!/usr/bin/env runhaskell
-{-# OPTIONS_GHC -Wall #-}
 
-import DB
-import LispParser
+import SICP.DB
+import SICP.LispParser
 
 import Text.Parsec hiding (try)
 import Control.Monad.IO.Class (liftIO)
-import Control.Exception
+import Control.Exception hiding (evaluate)
 
 import System.Console.Haskeline hiding (catch)
 import System.Environment
@@ -28,7 +26,7 @@ repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
 
         runQuery :: Value -> InputT IO ()
         runQuery x = do
-            v <- withInterrupt $ liftIO $ tryInterrupt $ DB.evaluate db x x (\_ s -> print s) (return ()) (\_ -> return())
+            v <- withInterrupt $ liftIO $ tryInterrupt $ evaluate db x x (\_ s -> print s) (return ()) (\_ -> return())
             case v of
                 Left e -> outputStrLn $ show e
                 Right _ -> return ()

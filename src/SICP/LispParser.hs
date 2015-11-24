@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE FlexibleContexts #-} -- for parsec 3
 
 -- http://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours/Parsing
@@ -8,7 +7,7 @@
 -- TODO: use ReadPrec (?)
 -- TODO: errors for parsers (<?>)
 
-module LispParser
+module SICP.LispParser
   ( Value (..)
   , lispExpr
   , lispSpace
@@ -117,7 +116,7 @@ lispExpr :: Stream s m Char => ParsecT s u m Value
 lispExpr          = lispAtom <|> lispBool <|> lispInteger <|> lispString <|> lispPair
 
 parseFile :: String -> IO (Either ParseError [Value])
-parseFile fname =  runP (lispSpace >> many LispParser.lispExpr <* eof) () fname `liftM` T.readFile fname
+parseFile fname =  runP (lispSpace >> many lispExpr <* eof) () fname `liftM` T.readFile fname
 
 -------------------------------------------------------------------------------
 -- Pretty print

@@ -1,7 +1,6 @@
-{-# OPTIONS_GHC -Wall #-}
 
-module DB
-  ( DB.evaluate
+module SICP.DB
+  ( evaluate
   , tests
   ) where
 
@@ -20,7 +19,7 @@ import qualified Data.Map.Strict as MapStrict
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import LispParser hiding (tests)
+import SICP.LispParser hiding (tests)
 
 import Test.Tasty
 import Test.Tasty.HUnit
