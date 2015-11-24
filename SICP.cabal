@@ -10,7 +10,7 @@ maintainer:          aleksey.makarov@gmail.com
 copyright:           2015 Aleksey Makarov
 category:            Education
 build-type:          Simple
-extra-source-files:
+extra-source-files:  data.txt
 cabal-version:       >=1.10
 
 executable SICP

@@ -176,9 +176,7 @@ instance Arbitrary Value where
 
 tests :: TestTree
 tests = testGroup "LispParser internal"
-  [ 
-{--
-    testCase "whitespace1"     $ ok    whitespace      " "             ()
+  [ testCase "whitespace1"     $ ok    whitespace      " "             ()
   , testCase "whitespace2"     $ ok    whitespace      "\n"            ()
   , testCase "lineComment1"    $ ok    lineComment     "; привет \r"   ()
   , testCase "lineComment2"    $ ok    lineComment     "; привет "     ()
@@ -189,8 +187,7 @@ tests = testGroup "LispParser internal"
   , testCase "nestedComment4"  $ fail  nestedComment   "#||"
   , testCase "nestedComment5"  $ fail  nestedComment   "#|#|"
   , testCase "nestedComment6"  $ fail  nestedComment   "#|#||#|"
---}
-    testCase "space"           $ ok    space     "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
+  , testCase "space"           $ ok    space     "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
   , testCase "ident"           $ ok    atom      "!013-x ; Вот!" (Atom "!013-x")
   , testCase "ident"           $ fail  atom      ".xx"
   , testCase "bool1"           $ ok    bool      "#t "           (Bool True)
