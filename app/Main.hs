@@ -2,7 +2,7 @@
 import SICP.DB
 import SICP.LispParser
 
-import Text.Parsec hiding (try)
+import Text.Parsec hiding (try, space)
 import Control.Monad.IO.Class (liftIO)
 import Control.Exception hiding (evaluate)
 
@@ -19,7 +19,7 @@ repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
             case minput of
                 Nothing -> return ()
                 Just input -> do
-                    case parse (lispSpace >> lispExpr <* eof) "" input of
+                    case parse (space >> expr <* eof) "" input of
                         Left e -> outputStrLn $ "Parse error: " ++ show e
                         Right x -> runQuery x
                     loop

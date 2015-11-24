@@ -3,14 +3,12 @@
 -- http://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours/Parsing
 -- http://lstephen.wordpress.com/2007/07/29/parsec-parser-testing-with-quickcheck/
 
--- TODO: simple names (without lisp...)
 -- TODO: use ReadPrec (?)
 -- TODO: errors for parsers (<?>)
 
 module SICP.LispParser
   ( Value (..)
-  , lispExpr
-  , lispSpace
+  , space, atom, bool, integer, string, pair, expr
   , parseFile
   , toDoc
   , tests
@@ -19,16 +17,19 @@ module SICP.LispParser
 import Data.Char ( isSpace, digitToInt )
 import Control.Monad (void, liftM)
 
-import Text.Parsec
-import Text.Parsec.Text ()
+import           Text.Parsec hiding (space, string)
+import qualified Text.Parsec as P (string)
+
 import qualified Data.Text.IO as T
 
-import Text.PrettyPrint ( (<+>), (<>) )
+import           Text.PrettyPrint ((<+>), (<>))
 import qualified Text.PrettyPrint as PP
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.QuickCheck
+
+import Prelude hiding (fail)
 
 -------------------------------------------------------------------------------
 -- Definitions
@@ -48,41 +49,41 @@ instance Show Value where
 instance Read Value where
   readsPrec _ = either (const []) id . parse parsecRead' ""
     where
-      parsecRead' = fmap (:[]) $ (,) <$> (lispSpace >> lispExpr) <*> getInput
+      parsecRead' = fmap (:[]) $ (,) <$> (space >> expr) <*> getInput
 
 -------------------------------------------------------------------------------
 -- Parser
 -------------------------------------------------------------------------------
 
-whitespace, lineComment, nestedComment, lispSpace :: Stream s m Char => ParsecT s u m ()
+whitespace, lineComment, nestedComment, space :: Stream s m Char => ParsecT s u m ()
 whitespace        = void $ satisfy isSpace
 lineComment       = char ';' >> (void $ manyTill anyToken $ void (oneOf "\n\t") <|> eof)
-nestedComment     = try (string "#|") >> inNestedComment
+nestedComment     = try (P.string "#|") >> inNestedComment
   where
-    inNestedComment   = (void $ try $ string "|#")
+    inNestedComment   = (void $ try $ P.string "|#")
       <|> (nestedComment >> inNestedComment)
       <|> (skipMany1 (noneOf "#|") >> inNestedComment)
       <|> (oneOf "#|" >> inNestedComment)
-lispSpace             = skipMany $ whitespace <|> lineComment <|> nestedComment
+space             = skipMany $ whitespace <|> lineComment <|> nestedComment
 
 lexeme :: Stream s m Char => ParsecT s u m a -> ParsecT s u m a
-lexeme t          = t <* lispSpace
+lexeme t          = t <* space
 
 idInitialChars, idSubsequentChars :: [Char]
 idInitialChars    = "!$%&*/:<=>?^_~"
 idSubsequentChars = "+-.@"
 
-lispAtom :: Stream s m Char => ParsecT s u m Value
-lispAtom          = Atom <$> lexeme ((:) <$> initial <*> many subsequent)
+atom :: Stream s m Char => ParsecT s u m Value
+atom          = Atom <$> lexeme ((:) <$> initial <*> many subsequent)
   where
     initial           = letter <|> oneOf idInitialChars
     subsequent        = initial <|> digit <|> oneOf idSubsequentChars
 
-lispBool :: Stream s m Char => ParsecT s u m Value
-lispBool          = Bool <$> lexeme (char '#' >> ((char 't' >> return True) <|> (char 'f' >> return False)))
+bool :: Stream s m Char => ParsecT s u m Value
+bool                  = Bool <$> lexeme (char '#' >> ((char 't' >> return True) <|> (char 'f' >> return False)))
 
-lispInteger :: Stream s m Char => ParsecT s u m Value
-lispInteger       = Integer <$> lexeme int
+integer :: Stream s m Char => ParsecT s u m Value
+integer               = Integer <$> lexeme int
   where
     makeInt           = foldl (\x y -> x * 10 + y) 0
     sign              = (char '-' >> return negate)
@@ -91,8 +92,8 @@ lispInteger       = Integer <$> lexeme int
     int               = sign <*> nat
     nat               = makeInt <$> many1 (fromIntegral . digitToInt <$> digit)
 
-lispString :: Stream s m Char => ParsecT s u m Value
-lispString        = String <$> lexeme (between (char '\"') (char '\"') stringInternal)
+string :: Stream s m Char => ParsecT s u m Value
+string        = String <$> lexeme (between (char '\"') (char '\"') stringInternal)
   where
     stringEscapes     = char '\"'
       <|> char '\\'
@@ -103,20 +104,20 @@ lispString        = String <$> lexeme (between (char '\"') (char '\"') stringInt
       <|> '\r' <$ char 'r'
     stringInternal    = many $ noneOf "\\\"" <|> (char '\\' >> stringEscapes)
 
-lispPair :: Stream s m Char => ParsecT s u m Value
-lispPair          = lexeme (char '(') >> inlispPairL
+pair :: Stream s m Char => ParsecT s u m Value
+pair          = lexeme (char '(') >> inlispPairL
   where
     inlispPairR l     = (lexeme (char ')') >> return (Pair l Nil))
-      <|> (lexeme (char '.') >> (Pair l <$> lispExpr) <* lexeme (char ')'))
-      <|> (Pair l <$> (lispExpr >>= inlispPairR) )
+      <|> (lexeme (char '.') >> (Pair l <$> expr) <* lexeme (char ')'))
+      <|> (Pair l <$> (expr >>= inlispPairR) )
     inlispPairL       = lexeme (char ')' >> return Nil)
-      <|> (lispExpr >>= inlispPairR)
+      <|> (expr >>= inlispPairR)
 
-lispExpr :: Stream s m Char => ParsecT s u m Value
-lispExpr          = lispAtom <|> lispBool <|> lispInteger <|> lispString <|> lispPair
+expr :: Stream s m Char => ParsecT s u m Value
+expr          = atom <|> bool <|> integer <|> string <|> pair
 
 parseFile :: String -> IO (Either ParseError [Value])
-parseFile fname =  runP (lispSpace >> many lispExpr <* eof) () fname `liftM` T.readFile fname
+parseFile fname =  runP (space >> many expr <* eof) () fname `liftM` T.readFile fname
 
 -------------------------------------------------------------------------------
 -- Pretty print
@@ -175,48 +176,51 @@ instance Arbitrary Value where
 
 tests :: TestTree
 tests = testGroup "LispParser internal"
-  [ testCase "whitespace1"     $ parseOK    whitespace      " "             ()
-  , testCase "whitespace2"     $ parseOK    whitespace      "\n"            ()
-  , testCase "lineComment1"    $ parseOK    lineComment     "; привет \r"   ()
-  , testCase "lineComment2"    $ parseOK    lineComment     "; привет "     ()
-  , testCase "nestedComment1"  $ parseOK    nestedComment   "#||#"          ()
-  , testCase "nestedComment2"  $ parseOK    nestedComment   "#|#||#|#"      ()
-  , testCase "nestedComment2"  $ parseFail  nestedComment   "#|#||#|# "
-  , testCase "nestedComment3"  $ parseFail  nestedComment   "#|"
-  , testCase "nestedComment4"  $ parseFail  nestedComment   "#||"
-  , testCase "nestedComment5"  $ parseFail  nestedComment   "#|#|"
-  , testCase "nestedComment6"  $ parseFail  nestedComment   "#|#||#|"
-  , testCase "space"           $ parseOK    lispSpace     "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
-  , testCase "ident"           $ parseOK    lispAtom      "!013-x ; Вот!" (Atom "!013-x")
-  , testCase "ident"           $ parseFail  lispAtom      ".xx"
-  , testCase "bool1"           $ parseOK    lispBool      "#t "           (Bool True)
-  , testCase "bool2"           $ parseOK    lispBool      "#f "           (Bool False)
-  , testCase "Integer1"        $ parseOK    lispInteger   "123 "          (Integer 123)
-  , testCase "Integer2"        $ parseOK    lispInteger   "-0666 ; FIXME" (Integer (-666))
-  , testCase "string1"         $ parseOK    lispString    "\"Wow!\" #| Here you are |# " (String "Wow!")
-  , testCase "string2"         $ parseOK    lispString    "\"\\\"\\\\\\t\" "  (String "\"\\\t")
-  , testCase "string3"         $ parseFail  lispString    "\\w "
-  , testCase "pair1"           $ parseOK    lispPair      "( ) "          Nil
-  , testCase "pair1x"          $ parseOK    lispPair      "(()) "         (Pair Nil Nil)
-  , testCase "pair2"           $ parseOK    lispPair      "( x ) "        (Pair (Atom "x") Nil)
-  , testCase "pair3"           $ parseOK    lispPair      "( -23) "       (Pair (Integer (-23)) Nil)
-  , testCase "pair4"           $ parseOK    lispPair      "(\"oops\") "   (Pair (String "oops") Nil)
-  , testCase "pair5"           $ parseOK    lispPair      "(() \"oops\")" (Pair Nil (Pair (String "oops") Nil))
-  , testCase "pair6"           $ parseOK    lispPair      "(().()) "      (Pair Nil Nil)
-  , testCase "pair7"           $ parseOK    lispPair      "(().\"oops\")" (Pair Nil (String "oops"))
-  , testCase "pair8"           $ parseOK    lispPair      "(\"oops\".())" (Pair (String "oops") Nil)
-  , testCase "pair9"           $ parseOK    lispPair      "( #t . () ) "  (Pair (Bool True) Nil)
-  , testCase "pair10"          $ parseOK    lispPair      "( () . #f ) "  (Pair Nil (Bool False))
-  , testCase "pair11"          $ parseOK    lispPair      "(a b c) "      (Pair (Atom "a") (Pair (Atom "b") (Pair (Atom "c") Nil)))
-  , testCase "pair12"          $ parseOK    lispPair      "(a b . c) "    (Pair (Atom "a") (Pair (Atom "b") (Atom "c")))
-  , testCase "pair13"          $ parseFail  lispPair      "(a . b c) "
+  [ 
+{--
+    testCase "whitespace1"     $ ok    whitespace      " "             ()
+  , testCase "whitespace2"     $ ok    whitespace      "\n"            ()
+  , testCase "lineComment1"    $ ok    lineComment     "; привет \r"   ()
+  , testCase "lineComment2"    $ ok    lineComment     "; привет "     ()
+  , testCase "nestedComment1"  $ ok    nestedComment   "#||#"          ()
+  , testCase "nestedComment2"  $ ok    nestedComment   "#|#||#|#"      ()
+  , testCase "nestedComment2"  $ fail  nestedComment   "#|#||#|# "
+  , testCase "nestedComment3"  $ fail  nestedComment   "#|"
+  , testCase "nestedComment4"  $ fail  nestedComment   "#||"
+  , testCase "nestedComment5"  $ fail  nestedComment   "#|#|"
+  , testCase "nestedComment6"  $ fail  nestedComment   "#|#||#|"
+--}
+    testCase "space"           $ ok    space     "   \n\t #|  Привет, как дела? #|!!!|# |# ; \r ;  Ура!"    ()
+  , testCase "ident"           $ ok    atom      "!013-x ; Вот!" (Atom "!013-x")
+  , testCase "ident"           $ fail  atom      ".xx"
+  , testCase "bool1"           $ ok    bool      "#t "           (Bool True)
+  , testCase "bool2"           $ ok    bool      "#f "           (Bool False)
+  , testCase "Integer1"        $ ok    integer   "123 "          (Integer 123)
+  , testCase "Integer2"        $ ok    integer   "-0666 ; FIXME" (Integer (-666))
+  , testCase "string1"         $ ok    string    "\"Wow!\" #| Here you are |# " (String "Wow!")
+  , testCase "string2"         $ ok    string    "\"\\\"\\\\\\t\" "  (String "\"\\\t")
+  , testCase "string3"         $ fail  string    "\\w "
+  , testCase "pair1"           $ ok    pair      "( ) "          Nil
+  , testCase "pair1x"          $ ok    pair      "(()) "         (Pair Nil Nil)
+  , testCase "pair2"           $ ok    pair      "( x ) "        (Pair (Atom "x") Nil)
+  , testCase "pair3"           $ ok    pair      "( -23) "       (Pair (Integer (-23)) Nil)
+  , testCase "pair4"           $ ok    pair      "(\"oops\") "   (Pair (String "oops") Nil)
+  , testCase "pair5"           $ ok    pair      "(() \"oops\")" (Pair Nil (Pair (String "oops") Nil))
+  , testCase "pair6"           $ ok    pair      "(().()) "      (Pair Nil Nil)
+  , testCase "pair7"           $ ok    pair      "(().\"oops\")" (Pair Nil (String "oops"))
+  , testCase "pair8"           $ ok    pair      "(\"oops\".())" (Pair (String "oops") Nil)
+  , testCase "pair9"           $ ok    pair      "( #t . () ) "  (Pair (Bool True) Nil)
+  , testCase "pair10"          $ ok    pair      "( () . #f ) "  (Pair Nil (Bool False))
+  , testCase "pair11"          $ ok    pair      "(a b c) "      (Pair (Atom "a") (Pair (Atom "b") (Pair (Atom "c") Nil)))
+  , testCase "pair12"          $ ok    pair      "(a b . c) "    (Pair (Atom "a") (Pair (Atom "b") (Atom "c")))
+  , testCase "pair13"          $ fail  pair      "(a . b c) "
   ]
   where
-    parseOK parser str expected = case parse (parser <* eof) "" str of
+    ok parser str expected = case parse (parser <* eof) "" str of
       Left e -> assertFailure $ show e
       Right actual -> assertEqual "" expected actual
 
-    parseFail parser str = case parse (parser <* eof) "" str of
+    fail parser str = case parse (parser <* eof) "" str of
       Left _ -> return ()
       Right x -> assertFailure $ "parser returned: " ++ show x
 

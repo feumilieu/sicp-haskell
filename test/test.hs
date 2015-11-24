@@ -3,7 +3,7 @@
 import SICP.LispParser
 import SICP.DB
 
-import Text.Parsec
+import Text.Parsec hiding (space)
 
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
@@ -153,17 +153,17 @@ dbTests db = testGroup "DB"
         runQuery :: String -> String -> IO (MultiSet Value)
         runQuery o q = evaluate db (parseExpr q) (parseExpr o) (\ms v -> return $ MultiSet.insert v ms) (return MultiSet.empty) return
 
-        parseExpr s = case parse (lispSpace >> lispExpr <* eof) "" s of
+        parseExpr s = case parse (space >> expr <* eof) "" s of
           Left e -> error $ show e
           Right x -> x
 
         parseMultiSet :: String -> MultiSet Value
-        parseMultiSet s = case parse (lispSpace >> many lispExpr <* eof) "" s of
+        parseMultiSet s = case parse (space >> many expr <* eof) "" s of
           Left e -> error $ show e
           Right x -> MultiSet.fromList x
 
 propValue' :: Value -> Bool
-propValue' x = either (const False) (== x) $ parse lispExpr "" $ show $ toDoc x
+propValue' x = either (const False) (== x) $ parse expr "" $ show $ toDoc x
 
 propValue :: TestTree
 propValue = QC.testProperty "LispParser QuickCheck" propValue'
