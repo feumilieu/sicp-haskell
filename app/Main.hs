@@ -9,7 +9,7 @@ import Control.Exception hiding (evaluate)
 import System.Console.Haskeline hiding (catch)
 import System.Environment
 
-repl :: [Value] -> IO ()
+repl :: DB -> IO ()
 repl db = runInputT (defaultSettings {historyFile = Just ".db"}) loop
     where
 
@@ -42,11 +42,10 @@ main = do
             dbpe <- try $ parseFile filename
             case dbpe of
                 Right dbp -> case dbp of
-                    Right db -> repl db
+                    Right db -> repl $ compileDB db
                     Left pe -> print pe
                 Left e -> printIOError e
         _ -> putStrLn "specify filename for the database in command line"
     where
         printIOError :: IOError -> IO ()
         printIOError e = putStrLn $ "### " ++ show e
-

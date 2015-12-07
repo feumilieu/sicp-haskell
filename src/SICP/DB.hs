@@ -1,6 +1,8 @@
 
 module SICP.DB
-  ( evaluate
+  ( DB
+  , compileDB
+  , evaluate
   , tests
   ) where
 
@@ -108,8 +110,8 @@ properList (x `Pair` xs) = (x:) <$> properList xs
 properList Nil = Just []
 properList _ = Nothing
 
-evaluate :: [Value] -> Value -> Value -> (x -> Value -> IO x) -> IO x -> (x -> IO b) -> IO b
-evaluate db q o f ii ee = runDBMonad (createDB db) $ foldDBMonad (\x y -> liftIO (f x y)) (liftIO ii) (liftIO . ee)
+evaluate :: DB -> Value -> Value -> (x -> Value -> IO x) -> IO x -> (x -> IO b) -> IO b
+evaluate db q o f ii ee = runDBMonad db $ foldDBMonad (\x y -> liftIO (f x y)) (liftIO ii) (liftIO . ee)
 
   where
 
@@ -263,8 +265,8 @@ addAssertionOrRule x = case x of
       rulesIndexed = storeInIndex r $ rulesIndexed db
     }
 
-createDB :: [Value] -> DB
-createDB = foldr addAssertionOrRule emptyDB
+compileDB :: [Value] -> DB
+compileDB = foldr addAssertionOrRule emptyDB
 
 fetch :: Indexable a => (DB -> [a]) -> (DB -> MapStrict.Map String [a]) -> Value -> Producer a DBMonad ()
 fetch sf sif p = case index p of
@@ -307,7 +309,7 @@ emptyStream = return ()
 -- Test
 -------------------------------------------------------------------------------
 
-tests :: [Value] -> TestTree
+tests :: DB -> TestTree
 tests db = testGroup "DB internal"
 
 -- streams
@@ -325,8 +327,8 @@ tests db = testGroup "DB internal"
       each [3 :: Int, 4, 5, 6] >> each [10, 11, 12]
 
 -- database
-  , testCase "fetchAssertions" $ runDBMonad (createDB db) (P.length $ fetchAssertions Nil) >>= (@?= 47)
-  , testCase "fetchRules"      $ runDBMonad (createDB db) (P.length $ fetchRules Nil)      >>= (@?= 22)
+  , testCase "fetchAssertions" $ runDBMonad db (P.length $ fetchAssertions Nil) >>= (@?= 47)
+  , testCase "fetchRules"      $ runDBMonad db (P.length $ fetchRules Nil)      >>= (@?= 22)
 
   , testCase "properList1" (properList Nil @?= Just [])
   , testCase "properList2" (properList (Atom "x" `Pair` Nil) @?= Just [Atom "x"])

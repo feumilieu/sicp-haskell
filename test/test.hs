@@ -12,7 +12,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck as QC
 
-dbTests :: [SICP.LispParser.Value] -> TestTree
+dbTests :: DB -> TestTree
 dbTests db = testGroup "DB"
 
 -- assertions
@@ -170,7 +170,7 @@ propValue = QC.testProperty "LispParser QuickCheck" propValue'
 
 main :: IO ()
 main = do
-    edb <- parseFile "data.txt"
+    edb <- fmap compileDB `liftM` parseFile "data.txt"
     case edb of
         Left e -> print e
         Right db -> defaultMain $ testGroup "Tests" [ SICP.LispParser.tests, propValue, SICP.DB.tests db, dbTests db ]
