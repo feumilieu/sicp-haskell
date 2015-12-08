@@ -17,53 +17,53 @@ dbTests :: DB -> TestTree
 dbTests db = testGroup "DB"
 
 -- assertions
-  [ testCase "case 1" $ runQuery "?x" "(начальник ?x (Битобор Бен))" >>=
-      (@?= parseMultiSet "(Хакер Лиза П)  (Фект Пабло Э) (Поправич Дайко)")
+  [ testCase "case 1" $ (runQuery "?x" "(начальник ?x (Битобор Бен))")
+      @?= parseMultiSet "(Хакер Лиза П)  (Фект Пабло Э) (Поправич Дайко)"
 
-  , testCase "case 2" $ runQuery "?x" "(должность ?x (бухгалтерия . ?y))" >>=
-      (@?= parseMultiSet "(Крэтчит Роберт) (Скрудж Эбин)")
+  , testCase "case 2" $ (runQuery "?x" "(должность ?x (бухгалтерия . ?y))")
+      @?= parseMultiSet "(Крэтчит Роберт) (Скрудж Эбин)"
 
-  , testCase "case 3" $ runQuery "?x" "(адрес ?x (Сламервилл . ?y))" >>=
-      (@?= parseMultiSet "(Фиден Кон) (Дум Хьюго) (Битобор Бен)")
+  , testCase "case 3" $ (runQuery "?x" "(адрес ?x (Сламервилл . ?y))")
+      @?= parseMultiSet "(Фиден Кон) (Дум Хьюго) (Битобор Бен)"
 
-  , testCase "case AND" $ runQuery "(?x ?y)" "(and (начальник ?x (Битобор Бен)) (адрес ?x ?y))" >>=
-      (@?= parseMultiSet
+  , testCase "case AND" $ (runQuery "(?x ?y)" "(and (начальник ?x (Битобор Бен)) (адрес ?x ?y))")
+      @?= parseMultiSet
         "((Поправич Дайко) (Бостон (Бэй Стейт Роуд) 22))\
         \((Фект Пабло Э)    (Кембридж (Эймс Стрит) 3))\
-        \((Хакер Лиза П)    (Кембридж (Массачусетс Авеню) 78))")
+        \((Хакер Лиза П)    (Кембридж (Массачусетс Авеню) 78))"
 
-  , testCase "case NOT" $ runQuery "(?person ?his-boss ?z2)"
+  , testCase "case NOT" $ (runQuery "(?person ?his-boss ?z2)"
         "(and \
         \(начальник ?person ?his-boss) \
         \(not (должность ?his-boss (компьютеры . ?z1))) \
-        \(должность ?his-boss ?z2))" >>=
-      (@?= parseMultiSet
+        \(должность ?his-boss ?z2))")
+      @?= parseMultiSet
         "((Фиден Кон) (Уорбак Оливер) (администрация большая шишка))\
         \((Крэтчит Роберт) (Скрудж Эбин) (бухгалтерия главный бухгалтер))\
         \((Скрудж Эбин) (Уорбак Оливер) (администрация большая шишка))\
-        \((Битобор Бен) (Уорбак Оливер) (администрация большая шишка))")
+        \((Битобор Бен) (Уорбак Оливер) (администрация большая шишка))"
 
 -- rules
-  , testCase "rule 1" $ runQuery "?x" "(живет-около ?x (Битобор Бен))" >>=
-      (@?= parseMultiSet "(Фиден Кон) (Дум Хьюго)")
+  , testCase "rule 1" $ (runQuery "?x" "(живет-около ?x (Битобор Бен))")
+      @?= parseMultiSet "(Фиден Кон) (Дум Хьюго)"
 
-  , testCase "rule 2 can-replace" $ runQuery "?x" "(can-replace ?x (Фект Пабло Э))" >>=
-      (@?= parseMultiSet "(Битобор Бен) (Хакер Лиза П)")
+  , testCase "rule 2 can-replace" $ (runQuery "?x" "(can-replace ?x (Фект Пабло Э))")
+      @?= parseMultiSet "(Битобор Бен) (Хакер Лиза П)"
 
-  , testCase "rule 3 independent" $ runQuery "?x" "(independent ?x)" >>=
-      (@?= parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)")
+  , testCase "rule 3 independent" $ (runQuery "?x" "(independent ?x)")
+      @?= parseMultiSet "(Скрудж Эбин) (Уорбак Оливер) (Битобор Бен)"
 
-  , testCase "rule 4 " $ runQuery "(?time ?who)" "(совещание ?who (пятница ?time))" >>=
-      (@?= parseMultiSet "(13 администрация)")
+  , testCase "rule 4 " $ (runQuery "(?time ?who)" "(совещание ?who (пятница ?time))")
+      @?= parseMultiSet "(13 администрация)"
 
-  , testCase "rule 5" $ runQuery "?day-and-time" "(время-совещания (Хакер Лиза П) ?day-and-time)" >>=
-      (@?= parseMultiSet "(среда 16) (среда 15)")
+  , testCase "rule 5" $ (runQuery "?day-and-time" "(время-совещания (Хакер Лиза П) ?day-and-time)")
+      @?= parseMultiSet "(среда 16) (среда 15)"
 
-  , testCase "rule 6" $ runQuery "?time" "(время-совещания (Хакер Лиза П) (среда ?time))" >>=
-      (@?= parseMultiSet "16 15")
+  , testCase "rule 6" $ (runQuery "?time" "(время-совещания (Хакер Лиза П) (среда ?time))")
+      @?= parseMultiSet "16 15"
 
-  , testCase "rule 7" $ runQuery "(?p1 ?p2)" "(живет-около ?p1 ?p2)" >>=
-      (@?= parseMultiSet
+  , testCase "rule 7" $ (runQuery "(?p1 ?p2)" "(живет-около ?p1 ?p2)")
+      @?= parseMultiSet
         "((Фиден Кон) (Дум Хьюго))\
         \((Фиден Кон) (Битобор Бен))\
         \((Дум Хьюго) (Фиден Кон))\
@@ -71,59 +71,58 @@ dbTests db = testGroup "DB"
         \((Хакер Лиза П) (Фект Пабло Э))\
         \((Фект Пабло Э) (Хакер Лиза П))\
         \((Битобор Бен) (Фиден Кон))\
-        \((Битобор Бен) (Дум Хьюго))")
+        \((Битобор Бен) (Дум Хьюго))"
 
-  , testCase "rule 8 append-to-form" $ runQuery "?z" "(append-to-form (a b) (c d) ?z)" >>=
-      (@?= parseMultiSet "(a b c d)")
+  , testCase "rule 8 append-to-form" $ (runQuery "?z" "(append-to-form (a b) (c d) ?z)")
+      @?= parseMultiSet "(a b c d)"
 
-  , testCase "rule 9 append-to-form" $ runQuery "?y" "(append-to-form (a b) ?y (a b c d))" >>=
-      (@?= parseMultiSet "(c d)")
+  , testCase "rule 9 append-to-form" $ (runQuery "?y" "(append-to-form (a b) ?y (a b c d))")
+      @?= parseMultiSet "(c d)"
 
-  , testCase "rule 10 append-to-form" $ runQuery "(?x ?y)" "(append-to-form ?x ?y (a b c d))" >>=
-      (@?= parseMultiSet
+  , testCase "rule 10 append-to-form" $ (runQuery "(?x ?y)" "(append-to-form ?x ?y (a b c d))")
+      @?= parseMultiSet
         "((a b c d) ())\
         \(() (a b c d))\
         \((a) (b c d))\
         \((a b) (c d))\
-        \((a b c) (d))")
+        \((a b c) (d))"
 
-  , testCase "rule 11 last-pair" $ runQuery "?x" "(last-pair (3) ?x)" >>=
-      (@?= parseMultiSet "3")
+  , testCase "rule 11 last-pair" $ (runQuery "?x" "(last-pair (3) ?x)")
+      @?= parseMultiSet "3"
 
-  , testCase "rule 12 last-pair" $ runQuery "?x" "(last-pair (1 2 3) ?x)" >>=
-      (@?= parseMultiSet "3")
+  , testCase "rule 12 last-pair" $ (runQuery "?x" "(last-pair (1 2 3) ?x)")
+      @?= parseMultiSet "3"
 
-  , testCase "rule 13 last-pair" $ runQuery "?x" "(last-pair (2 ?x) (3))" >>=
-      (@?= parseMultiSet "(3)")
+  , testCase "rule 13 last-pair" $ (runQuery "?x" "(last-pair (2 ?x) (3))")
+      @?= parseMultiSet "(3)"
 
-  , testCase "rule 14 next-to" $ runQuery "(?x ?y)" "(?x next-to ?y in (1 (2 3) 4))" >>=
-      (@?= parseMultiSet "((2 3) 4) (1 (2 3))")
+  , testCase "rule 14 next-to" $ (runQuery "(?x ?y)" "(?x next-to ?y in (1 (2 3) 4))")
+      @?= parseMultiSet "((2 3) 4) (1 (2 3))"
 
-  , testCase "rule 15 next-to" $ runQuery "?x" "(?x next-to 1 in (2 1 3 1))" >>=
-      (@?=  parseMultiSet "2 3")
+  , testCase "rule 15 next-to" $ (runQuery "?x" "(?x next-to 1 in (2 1 3 1))")
+      @?=  parseMultiSet "2 3"
 
-  , testCase "rule 16" $ runQuery "?x" "(подчиняется (Битобор Бен) ?x)" >>=
-      (@?=  parseMultiSet "(Уорбак Оливер)")
-  , testCase "rule 17" $ runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)" >>=
-      (@?=  parseMultiSet "(Уорбак Оливер)")
+  , testCase "rule 16" $ (runQuery "?x" "(подчиняется (Битобор Бен) ?x)")
+      @?=  parseMultiSet "(Уорбак Оливер)"
+  , testCase "rule 17" $ (runQuery "?x" "(подчиняется1 (Битобор Бен) ?x)")
+      @?=  parseMultiSet "(Уорбак Оливер)"
 
-  , testCase "rule 18 reverse" $ runQuery "?x" "(reverse () ?x)" >>=
-      (@?= parseMultiSet "()")
-  , testCase "rule 19 reverse" $ runQuery "?x" "(reverse ?x ())" >>=
-      (@?= parseMultiSet "()")
-  , testCase "rule 20 reverse" $ runQuery "?x" "(reverse (a) ?x)" >>=
-      (@?= parseMultiSet "(a)")
-  , testCase "rule 21 reverse" $ runQuery "?x" "(reverse ?x (a))" >>=
-      (@?= parseMultiSet "(a)")
-  , testCase "rule 22 reverse" $ runQuery "?x" "(reverse (a b c d) ?x)" >>=
-      (@?= parseMultiSet "(d c b a)")
-  , testCase "rule 23 reverse" $ runQuery "?x" "(reverse ?x (a b c d))" >>=
-      (@?= parseMultiSet "(d c b a)")
-  , testCase "rule 24 reverse" $ runQuery "?x" "(reverse (a b c d e) ?x)" >>=
-      (@?= parseMultiSet "(e d c b a)")
-  , testCase "rule 25 reverse" $ runQuery "?x" "(reverse ?x (a b c d e))" >>=
-      (@?= parseMultiSet "(e d c b a)")
-
+  , testCase "rule 18 reverse" $ (runQuery "?x" "(reverse () ?x)")
+      @?= parseMultiSet "()"
+  , testCase "rule 19 reverse" $ (runQuery "?x" "(reverse ?x ())")
+      @?= parseMultiSet "()"
+  , testCase "rule 20 reverse" $ (runQuery "?x" "(reverse (a) ?x)")
+      @?= parseMultiSet "(a)"
+  , testCase "rule 21 reverse" $ (runQuery "?x" "(reverse ?x (a))")
+      @?= parseMultiSet "(a)"
+  , testCase "rule 22 reverse" $ (runQuery "?x" "(reverse (a b c d) ?x)")
+      @?= parseMultiSet "(d c b a)"
+  , testCase "rule 23 reverse" $ (runQuery "?x" "(reverse ?x (a b c d))")
+      @?= parseMultiSet "(d c b a)"
+  , testCase "rule 24 reverse" $ (runQuery "?x" "(reverse (a b c d e) ?x)")
+      @?= parseMultiSet "(e d c b a)"
+  , testCase "rule 25 reverse" $ (runQuery "?x" "(reverse ?x (a b c d e))")
+      @?= parseMultiSet "(e d c b a)"
 
 -- lisp-value
 {-
@@ -151,8 +150,8 @@ dbTests db = testGroup "DB"
     ]
     where
 
-        runQuery :: String -> String -> IO (MultiSet Value)
-        runQuery o q = foldM (\ms v -> return $ MultiSet.insert v ms) MultiSet.empty $ evaluate db (parseExpr q) (parseExpr o)
+        runQuery :: String -> String -> MultiSet Value
+        runQuery o q = foldl (flip MultiSet.insert) MultiSet.empty $ evaluate db (parseExpr q) (parseExpr o)
 
         parseExpr s = case parse (space >> expr <* eof) "" s of
           Left e -> error $ show e
