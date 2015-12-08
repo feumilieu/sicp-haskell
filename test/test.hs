@@ -7,6 +7,7 @@ import Text.Parsec hiding (space)
 
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
+import Control.Monad
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -151,7 +152,7 @@ dbTests db = testGroup "DB"
     where
 
         runQuery :: String -> String -> IO (MultiSet Value)
-        runQuery o q = evaluate db (parseExpr q) (parseExpr o) (\ms v -> return $ MultiSet.insert v ms) (return MultiSet.empty) return
+        runQuery o q = foldM (\ms v -> return $ MultiSet.insert v ms) MultiSet.empty $ evaluate db (parseExpr q) (parseExpr o)
 
         parseExpr s = case parse (space >> expr <* eof) "" s of
           Left e -> error $ show e

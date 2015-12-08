@@ -19,7 +19,7 @@ executable SICP
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall
   default-language:	Haskell2010
   build-depends:       base, parsec, pretty, tasty, tasty-quickcheck,
-                       transformers, pipes, multiset, containers, HUnit, text,
+                       transformers, multiset, containers, HUnit, text,
                        tasty-hunit, haskeline, QuickCheck,
                        SICP
 
@@ -28,7 +28,7 @@ library
   exposed-modules:     SICP.DB, SICP.LispParser
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall
   default-language:    Haskell2010
-  build-depends:       base, transformers, pipes, containers, tasty,
+  build-depends:       base, transformers, containers, tasty,
                        tasty-hunit, parsec, text, QuickCheck, pretty
 
 test-suite test
@@ -37,7 +37,7 @@ test-suite test
   type:                exitcode-stdio-1.0
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -Wall
   default-language:    Haskell2010
-  build-depends:       base, tasty, pipes, multiset, containers, HUnit, text,
+  build-depends:       base, tasty, multiset, containers, HUnit, text,
                        parsec, pretty, tasty-hunit, tasty-quickcheck, SICP
 
 source-repository head

@@ -9,11 +9,9 @@ module SICP.DB
 import Data.Maybe
 import Data.List
 import Control.Monad
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.State.Strict as S
-
-import Pipes
-import qualified Pipes.Prelude as P
+import Control.Monad.Trans.State.Lazy as S
 
 import qualified Data.Map.Lazy as Map
 import qualified Data.Map.Strict as MapStrict
@@ -28,9 +26,6 @@ import Test.Tasty.HUnit
 
 -- TODO: profiling
 
--- TODO: rewrite (Producer -> Producer) as Pipe
--- http://stackoverflow.com/questions/22425432/how-to-find-the-end-of-pipe
-
 -------------------------------------------------------------------------------
 -- Datatypes
 -------------------------------------------------------------------------------
@@ -38,10 +33,10 @@ import Test.Tasty.HUnit
 type Frame = Map.Map String Value
 type Rule = (Value, Value)
 
-type DBMonad = ReaderT (Set Value, DB) (StateT Int IO)
+type DBMonad = ReaderT (Set Value, DB) (State Int)
 
-runDBMonad :: DB -> DBMonad a -> IO a
-runDBMonad db m = evalStateT (runReaderT m (Set.empty, db)) 0
+runDBMonad :: DB -> DBMonad a -> a
+runDBMonad db m = evalState (runReaderT m (Set.empty, db)) 0
 
 tick :: DBMonad Int
 tick = lift $ state $ \s -> (s, s + 1)
@@ -93,7 +88,7 @@ fixValue v f = evalState (fixValue' $ instantiate v f) []
 
 -------------------------------------------------------------------------------
 
-qeval :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
+qeval :: Value -> [Frame] -> DBMonad [Frame]
 qeval (Atom "and" `Pair` q)
   | isJust plq = conjoin $ fromJust plq
   where plq = properList q
@@ -102,7 +97,7 @@ qeval (Atom "or" `Pair` q)
   where plq = properList q
 qeval (Atom "not" `Pair` (q `Pair` Nil)) = negateQuery q
 qeval (Atom "lisp-value"  `Pair` _) = undefined
-qeval (Atom "always-true" `Pair` _) = id
+qeval (Atom "always-true" `Pair` _) = return
 qeval q = simpleQuery q
 
 properList :: Value -> Maybe [Value]
@@ -110,38 +105,39 @@ properList (x `Pair` xs) = (x:) <$> properList xs
 properList Nil = Just []
 properList _ = Nothing
 
-evaluate :: DB -> Value -> Value -> (x -> Value -> IO x) -> IO x -> (x -> IO b) -> IO b
-evaluate db q o f ii ee = runDBMonad db $ foldDBMonad (\x y -> liftIO (f x y)) (liftIO ii) (liftIO . ee)
+evaluate :: DB -> Value -> Value -> [Value]
+evaluate db query outputPattern = map (instantiate outputPattern) $ runDBMonad db $ qeval query [Map.empty]
 
+simpleQuery :: Value -> [Frame] -> DBMonad [Frame]
+simpleQuery q fs = liftM flattenInterleave $ mapM expandOneFrame fs
   where
+    expandOneFrame :: Frame -> DBMonad [Frame]
+    expandOneFrame f = (++) <$> findAssertions q f <*> applyRules q f
 
-    foldDBMonad :: (x -> Value -> DBMonad x) -> DBMonad x -> (x -> DBMonad b) -> DBMonad b
-    foldDBMonad g i e = P.foldM g i e p
-
-    p :: Producer Value DBMonad ()
-    p = qeval q (yield Map.empty) >-> P.map (instantiate o)
-
-simpleQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-simpleQuery q = mapFlattenInterleave (\f -> findAssertions q f >> applyRules q f)
-
-conjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-conjoin = foldr (\a b -> b . qeval a) id
-
-disjoin :: [Value] -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-disjoin = foldr (\a b s -> interleave (qeval a s) (b s)) (const emptyStream)
-
-negateQuery :: Value -> Producer Frame DBMonad () -> Producer Frame DBMonad ()
-negateQuery q s = s >-> P.mapM tryQ >-> P.mapFoldable id
+conjoin :: [Value] -> [Frame] -> DBMonad [Frame]
+conjoin = foldr f return
   where
-    tryQ :: Frame -> DBMonad (Maybe Frame)
-    tryQ f = (\x -> if x then Just f else Nothing) `liftM` (P.null . qeval q . yield) f
+    f :: Value -> ([Frame] -> DBMonad [Frame]) -> [Frame] -> DBMonad [Frame]
+    f v g fs = qeval v fs >>= g
+
+disjoin :: [Value] -> [Frame] -> DBMonad [Frame]
+disjoin = foldr f (const $ return [])
+  where
+    f :: Value -> ([Frame] -> DBMonad [Frame]) -> [Frame] -> DBMonad [Frame]
+    f v g fs = interleave <$> (qeval v fs) <*> (g fs)
+
+negateQuery :: Value -> [Frame] -> DBMonad [Frame]
+negateQuery q s = filterM tryQ s
+  where
+    tryQ :: Frame -> DBMonad (Bool)
+    tryQ f = null `fmap` qeval q [f]
 
 -------------------------------------------------------------------------------
 -- 4.4.4.3 Поиск утверждений с помощью сопоставления с образцом
 -------------------------------------------------------------------------------
 
-findAssertions :: Value -> Frame -> Producer Frame DBMonad ()
-findAssertions p f = fetchAssertions p >-> P.mapFoldable (\x -> patternMatch p x f)
+findAssertions :: Value -> Frame -> DBMonad [Frame]
+findAssertions p f = mapMaybe (\x -> patternMatch p x f) `liftM` (fetchAssertions p)
 
 patternMatch :: Value -> Value -> Frame -> Maybe Frame
 patternMatch (Atom ('?':pn)) d f = case Map.lookup pn f of
@@ -156,21 +152,23 @@ patternMatch p d f
 -- 4.4.4.4 Правила и унификация
 -------------------------------------------------------------------------------
 
-applyRules :: Value -> Frame -> Producer Frame DBMonad ()
-applyRules p f = mapFlattenInterleave (applyARule p f) (fetchRules p)
+applyRules :: Value -> Frame -> DBMonad [Frame]
+applyRules p f = do
+  rs <- fetchRules p
+  flattenInterleave `fmap` mapM (applyARule p f) rs
 
-applyARule :: Value -> Frame -> Rule -> Producer Frame DBMonad ()
+applyARule :: Value -> Frame -> Rule -> DBMonad [Frame]
 applyARule p f (c, b) = do
-  serial <- lift tick
+  serial <- tick
   let cRenamed = renameVariables c serial
   case unifyMatch p cRenamed f of
     Just ff -> do
       let xn = fixValue cRenamed ff
-      alreadySeen <- lift $ liftM (Set.member xn) askZ
+      alreadySeen <- liftM (Set.member xn) askZ
       if alreadySeen
-        then emptyStream
-        else hoist (localAddValue xn) $ qeval (renameVariables b serial) (yield ff)
-    Nothing -> emptyStream
+        then return []
+        else (localAddValue xn) $ qeval (renameVariables b serial) [ff]
+    Nothing -> return []
 
 renameVariables :: Value -> Int -> Value
 renameVariables e serial = treeWalk e
@@ -218,8 +216,8 @@ dependsOn e var frame = treeWalk e
 data DB = DB
   { assertions :: [Value]
   , assertionsIndexed :: MapStrict.Map String [Value]
-  , rules :: [(Value, Value)]
-  , rulesIndexed :: MapStrict.Map String [(Value, Value)]
+  , rules :: [Rule]
+  , rulesIndexed :: MapStrict.Map String [Rule]
   }
 
 emptyDB :: DB
@@ -268,42 +266,28 @@ addAssertionOrRule x = case x of
 compileDB :: [Value] -> DB
 compileDB = foldr addAssertionOrRule emptyDB
 
-fetch :: Indexable a => (DB -> [a]) -> (DB -> MapStrict.Map String [a]) -> Value -> Producer a DBMonad ()
+fetch :: Indexable a => (DB -> [a]) -> (DB -> MapStrict.Map String [a]) -> Value -> DBMonad [a]
 fetch sf sif p = case index p of
-  Nothing -> liftM sf (lift askDB) >>= each
-  Just i -> liftM sif (lift askDB) >>= (maybe emptyStream each . MapStrict.lookup i)
+  Nothing -> liftM sf askDB
+  Just i ->  ((fromMaybe []) . (MapStrict.lookup i) . sif) `fmap` askDB
 
-fetchAssertions :: Value -> Producer Value DBMonad ()
+fetchAssertions :: Value -> DBMonad [Value]
 fetchAssertions = fetch assertions assertionsIndexed
 
-fetchRules :: Value -> Producer Rule DBMonad ()
+fetchRules :: Value -> DBMonad [Rule]
 fetchRules = fetch rules rulesIndexed
 
 -------------------------------------------------------------------------------
 -- 4.4.4.6 Операции над потоками
 -------------------------------------------------------------------------------
 
-interleave :: Monad m => Producer a m () -> Producer a m () -> Producer a m ()
-interleave a b = do
-  n <- lift $ next a
-  case n of
-    Left () -> b
-    Right (x, a') -> do
-      yield x
-      interleave b a'
+interleave :: [a] -> [a] -> [a]
+interleave [] ys = ys
+interleave (x:xs) ys = x : interleave ys xs
 
-flattenInterleave :: Monad m => Producer (Producer a m ()) m () -> Producer a m ()
-flattenInterleave pp = do
-  n <- lift $ next pp
-  case n of
-    Left () -> lift $ return ()
-    Right (x, pp') -> interleave x (flattenInterleave pp')
-
-mapFlattenInterleave :: Monad m => (a -> Producer b m ()) -> Producer a m () -> Producer b m ()
-mapFlattenInterleave f a = flattenInterleave $ a >-> P.map f
-
-emptyStream :: Monad m => Producer a m ()
-emptyStream = return ()
+flattenInterleave :: [[a]] -> [a]
+flattenInterleave [] = []
+flattenInterleave (x : xs) = interleave x $ flattenInterleave xs
 
 -------------------------------------------------------------------------------
 -- Test
@@ -313,30 +297,17 @@ tests :: DB -> TestTree
 tests db = testGroup "DB internal"
 
 -- streams
-  [ testEqualProducer "interleave" [1,10,2,20,3,4] $
-      interleave (each [1 :: Int, 2, 3, 4]) (each [10, 20])
-  , testEqualProducer "interleave2" [1,2,3,4] $
-      interleave (each [1 :: Int, 2, 3, 4]) emptyStream
-  , testEqualProducer "interleave3" [1,2,3,4] $
-      interleave emptyStream (each [1 :: Int, 2, 3, 4])
-  , testEqualProducer "flatteinInterleave" [1,1,2,1,3,2,1,3,2,4,2,3,3,4,4,5,5,6] $
-      flattenInterleave (each [3, 4, 5, 6] >-> P.map fn)
-  , testEqualProducer "mapFlatteinInterleave" [1,1,2,1,3,2,1,3,2,4,2,3,3,4,4,5,5,6] $
-      mapFlattenInterleave fn (each [3, 4, 5, 6])
-  , testEqualProducer "append" [3,4,5,6,10,11,12] $
-      each [3 :: Int, 4, 5, 6] >> each [10, 11, 12]
+  [ testCase "interleave"             $ (interleave [1 :: Int, 2, 3, 4] [10, 20]) @?= [1,10,2,20,3,4]
+  , testCase "interleave2"            $ (interleave [1 :: Int, 2, 3, 4] [])       @?= [1,2,3,4]
+  , testCase "interleave3"            $ (interleave [] [1 :: Int, 2, 3, 4])       @?= [1,2,3,4]
+  , testCase "flatteinInterleave"     $ (flattenInterleave [[1 :: Int .. 3], [1 .. 4], [1 .. 5], [1 .. 6]])
+                                                                                  @?= [1,1,2,1,3,2,1,3,2,4,2,3,3,4,4,5,5,6]
+
+  , testCase "properList1" $ properList Nil                        @?= Just []
+  , testCase "properList2" $ properList (Atom "x" `Pair` Nil)      @?= Just [Atom "x"]
+  , testCase "properList3" $ properList (Atom "x" `Pair` Atom "b") @?= Nothing
 
 -- database
-  , testCase "fetchAssertions" $ runDBMonad db (P.length $ fetchAssertions Nil) >>= (@?= 47)
-  , testCase "fetchRules"      $ runDBMonad db (P.length $ fetchRules Nil)      >>= (@?= 22)
-
-  , testCase "properList1" (properList Nil @?= Just [])
-  , testCase "properList2" (properList (Atom "x" `Pair` Nil) @?= Just [Atom "x"])
-  , testCase "properList3" (properList (Atom "x" `Pair` Atom "b") @?= Nothing)
-
+  , testCase "fetchAssertions" $ (length $ runDBMonad db $ fetchAssertions Nil) @?= 47
+  , testCase "fetchRules"      $ (length $ runDBMonad db $ fetchRules Nil)      @?= 22
   ]
-  where
-
-    fn n = each [1 :: Int .. n]
-
-    testEqualProducer s expected actual = testCase s $ P.toListM actual >>= (@?= expected)
