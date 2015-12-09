@@ -36,7 +36,7 @@ import Prelude hiding (fail)
 -------------------------------------------------------------------------------
 
 data Value = Atom String
-  | Bool Bool 
+  | Bool Bool
   | Integer Integer
   | String String
   | Nil
@@ -137,7 +137,7 @@ toDoc (String s) = PP.doubleQuotes $ PP.text (escapeString s)
 
 toDoc Nil = PP.text "()"
 toDoc (Pair l Nil) = PP.parens $ toDoc l
-toDoc (Pair l r) = PP.char '(' <> toDoc l <+> toDocR r 
+toDoc (Pair l r) = PP.char '(' <> toDoc l <+> toDocR r
   where
     toDocR (Pair ll Nil) = toDoc ll <> PP.char ')'
     toDocR (Pair ll ls@(Pair _ _)) = toDoc ll <+> toDocR ls
@@ -220,4 +220,3 @@ tests = testGroup "LispParser internal"
     fail parser str = case parse (parser <* eof) "" str of
       Left _ -> return ()
       Right x -> assertFailure $ "parser returned: " ++ show x
-
