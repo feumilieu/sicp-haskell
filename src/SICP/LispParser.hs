@@ -57,7 +57,7 @@ instance Read Value where
 
 whitespace, lineComment, nestedComment, space :: Stream s m Char => ParsecT s u m ()
 whitespace        = void $ satisfy isSpace
-lineComment       = char ';' >> (void $ manyTill anyToken $ void (oneOf "\n\t") <|> eof)
+lineComment       = char ';' >> (void $ manyTill anyToken $ void newline <|> eof)
 nestedComment     = try (P.string "#|") >> inNestedComment
   where
     inNestedComment   = (void $ try $ P.string "|#")
