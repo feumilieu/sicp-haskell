@@ -8,6 +8,7 @@ module SICP.DB
 
 import Data.Maybe
 import Data.List
+import Data.Foldable
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
@@ -115,10 +116,7 @@ simpleQuery q fs = liftM flattenInterleave $ mapM expandOneFrame fs
     expandOneFrame f = (++) <$> findAssertions q f <*> applyRules q f
 
 conjoin :: [Value] -> [Frame] -> DBMonad [Frame]
-conjoin = foldr f return
-  where
-    f :: Value -> ([Frame] -> DBMonad [Frame]) -> [Frame] -> DBMonad [Frame]
-    f v g fs = qeval v fs >>= g
+conjoin vs fs = foldlM (flip qeval) fs vs
 
 disjoin :: [Value] -> [Frame] -> DBMonad [Frame]
 disjoin = foldr f (const $ return [])
