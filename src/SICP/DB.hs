@@ -119,10 +119,11 @@ conjoin :: [Value] -> [Frame] -> DBMonad [Frame]
 conjoin vs fs = foldlM (flip qeval) fs vs
 
 disjoin :: [Value] -> [Frame] -> DBMonad [Frame]
-disjoin = foldr f (const $ return [])
-  where
-    f :: Value -> ([Frame] -> DBMonad [Frame]) -> [Frame] -> DBMonad [Frame]
-    f v g fs = interleave <$> (qeval v fs) <*> (g fs)
+disjoin vs fs = foldlM f fs vs
+   where
+     f :: [Frame] -> Value -> DBMonad [Frame]
+     f fs v = flip interleave fs `fmap` qeval v fs
+     -- f = undefined
 
 negateQuery :: Value -> [Frame] -> DBMonad [Frame]
 negateQuery q s = filterM tryQ s
